@@ -87,7 +87,7 @@ def test_answer_with_context_size(tmp_path):
     session, client, _ = make_session(tmp_path, [[chunk("Hello"), chunk(" there", done=True)]])
     asyncio.run(session.send("Hi"))
     assert session.messages[-1] == {"role": "assistant", "content": "Hello there"}
-    assert client.requests[0]["options"]["num_ctx"] == 32000
+    assert client.requests[0]["options"]["num_ctx"] == 65536
     assert session.used_tokens == 110
 
 def test_unknown_tool_gets_a_response(tmp_path):
@@ -318,7 +318,7 @@ def test_out_of_memory_is_explained_in_the_feed(tmp_path):
     client.chat = chat
     asyncio.run(session.send("Hi"))
     error = session.entries[-1]
-    assert error.kind == c.ERROR and "ran out of memory with a context of 32 000 tokens" in error.text
+    assert error.kind == c.ERROR and "ran out of memory with a context of 65 536 tokens" in error.text
     assert "Ollama's message: model requires more system memory" in error.text
 
 def test_a_stopped_tools_server_is_reported(tmp_path):
@@ -343,3 +343,62 @@ def test_the_model_is_told_where_its_instructions_are_from(tmp_path):
     assert entry.text.startswith(note) and entry.text in system  # The feed shows what the model gets
     asyncio.run(session.send("Hi"))  # Unchanged file: not read again before the first prompt
     assert "read again" not in next(e for e in session.entries if e.kind == c.INSTRUCTIONS).title
+
+class CountingClient(FakeClient):
+    """Reports the prompt's tokens as Ollama would (about 3.2 characters per token), or the given counts."""
+
+    def __init__(self, replies, counts=None):
+        super().__init__(replies)
+        self.counts = list(counts or [])
+
+    async def chat(self, **kwargs):
+        import json
+        size = len(json.dumps(kwargs.get("tools") or [])) + sum(len(json.dumps({k: v for k, v in m.items() if k != "images"}))
+                                                                 for m in kwargs["messages"])
+        count = self.counts.pop(0) if self.counts else int(size / 3.2)
+        stream = await super().chat(**kwargs)
+
+        async def counted():
+            async for part in stream:
+                if part.done:
+                    part.prompt_eval_count = count
+                yield part
+        return counted()
+
+def big_reads(session, mcp, size=3000):
+    async def call_tool(name, args):
+        mcp.calls.append((name, args))
+        return SimpleNamespace(content=[SimpleNamespace(type="text", text=f"{args.get('path')}: " + "x" * size)], is_error=False)
+    mcp.call_tool = call_tool
+
+def test_old_tool_responses_make_room_instead_of_the_request_being_dropped(tmp_path):
+    read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], num_ctx=4000, auto_approve_tools=["read_file_with_metadata"])
+    session.client = CountingClient([read("a.py"), read("b.py"), read("c.py"), [chunk("Done.", done=True)]])
+    big_reads(session, mcp)
+    asyncio.run(session.send("Read the three files"))
+    assert session.messages[1] == {"role": "user", "content": "Read the three files"}  # The request stays
+    tool_texts = tool_messages(session)
+    assert tool_texts[0].startswith("[Removed by Local Fox to make room in the context: the response of read_file_with_metadata a.py")
+    assert tool_texts[-1].startswith("c.py: xxx")  # The latest step's response stays
+    calls = [e for e in session.entries if e.kind == c.TOOL]
+    assert calls[0].removed and not calls[-1].removed
+    assert any(e.kind == c.NOTICE and "To fit the context" in e.text for e in session.entries)
+    assert session.entries[-1].kind == c.ASSISTANT and session.entries[-1].text == "Done."
+    assert not any(e.kind == c.ERROR for e in session.entries)
+
+def test_a_cut_by_ollama_stops_the_turn(tmp_path):
+    read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], auto_approve_tools=["read_file_with_metadata"])
+    session.client = CountingClient([read("a.py"), read("b.py"), [chunk("Done.", done=True)]], counts=[30000, 29000])
+    asyncio.run(session.send("Read"))
+    assert any(e.kind == c.ERROR and "Ollama dropped the beginning of the conversation" in e.text for e in session.entries)
+    assert tool_messages(session)[-1] == STOPPED_BEFORE  # The call of the cut reply is answered, not run
+    assert len(mcp.calls) == 1
+
+def test_a_request_that_cannot_fit_is_not_sent(tmp_path):
+    session, _, _ = make_session(tmp_path, [], num_ctx=2100)
+    session.client = CountingClient([[chunk("never", done=True)]])
+    asyncio.run(session.send("x" * 20000))
+    assert session.client.requests == []
+    assert any(e.kind == c.ERROR and "no longer fits in the context" in e.text for e in session.entries)

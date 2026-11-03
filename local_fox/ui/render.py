@@ -128,6 +128,8 @@ def entry_html(entry: Entry) -> str:
                       + f"&nbsp;&nbsp;<span class={cls}>{mark}</span>", TEXT)
         if entry.resolved and entry.resolved != entry.tool:
             line += f"&nbsp;&nbsp;<span class=dim>(ran {esc(entry.server)}:{esc(entry.resolved)})</span>"
+        if entry.removed:
+            line += "&nbsp;&nbsp;<span class=dim>(response removed from the model's context)</span>"
         if entry.collapsed:
             return f"<p>{line}</p>"
         return f"<p>{line}</p>{_arguments(entry)}{_response(entry)}"

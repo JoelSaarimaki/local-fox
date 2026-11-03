@@ -125,7 +125,7 @@ that does not start with the new config shows its error in the feed.
 |---|---|---|
 | `ollama_host` | `http://127.0.0.1:11434` | Where Ollama runs |
 | `model` | `flint:40b` | Also set by the model menu |
-| `num_ctx` | `32000` | The context size sent with every request |
+| `num_ctx` | `65536` | The context size sent with every request; with flint:40b a larger one needs little memory |
 | `think` | `null` | `null`: on for models that can think; `true`, `false` or a level such as `"high"` |
 | `temperature` | `null` | `null`: the model's own |
 | `seed` | `null` | A fixed seed, for repeatable runs |
@@ -204,6 +204,25 @@ recognizes these:
 | Ollama closed the connection in the middle of a reply | Asking again; Ollama's log |
 | The model is not installed, cannot call tools, or cannot think | `ollama pull`, another model, or the `think` setting |
 | The tools' server stopped | **Restart tools and clear**; its log in `logs/server-<key>.log` (the model is told not to call tools until then) |
+
+## Fitting the context
+
+A model sees only as much of the conversation as fits in its context (`num_ctx`, 65 536 tokens by default).
+Ollama does not refuse a longer request: it silently drops the oldest messages, the user's request first, and the
+model goes on without knowing its task. Local Fox keeps that from happening:
+
+- **Before every request**, it estimates the request's size (calibrated with Ollama's own counts) and leaves room
+  for the reply. If the request would not fit, the responses of the oldest tool calls are replaced with a short
+  note ("Removed by Local Fox to make room in the context: the response of read_file_with_metadata src/app.py,
+  about 5 900 tokens. Call the tool again if you need it."), oldest first, until it fits. Your messages, the
+  model's replies and the latest step's tool responses always stay, so the model keeps its task and can read a
+  file again. The feed says so, and marks those tool calls "(response removed from the model's context)".
+- **If it still does not fit**, the request is not sent, and the feed offers **Clear**, **Export** and **Larger
+  context**.
+- **If Ollama cuts the conversation anyway** (its count of a request drops although nothing was removed), the turn
+  stops and the feed says so.
+- **New projects limit a tool response** to 16 000 characters (`max_output_chars` in the tools config, about 4 000
+  tokens; the tools' own default is 40 000), and the outline of a folder to a quarter of that.
 
 ## Stopping and continuing
 

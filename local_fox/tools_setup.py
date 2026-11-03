@@ -24,6 +24,7 @@ from .filemap import CONFIG_NAME, INSTRUCTIONS_NAME, LEGACY_FOLDER, PROJECT_FOLD
 
 TOOLS_MODULE = "ollmcp_tools"
 SERVER_FLAG = "--tools-server"
+MAX_OUTPUT_CHARS = 16000  # The largest tool response in a new project, about 4 000 tokens
 CONVERSATIONS = "conversations"  # The saved conversations, in the project's Local Fox folder
 
 def frozen() -> bool:
@@ -148,6 +149,7 @@ def _with_instructions(config: dict, folder: str) -> dict:
     """
     Adds instructions_file to the tools config, after read_only_files: Local Fox gives that file to the model at the
     start of every conversation, so the config says which file it is. Relative to project_dir, as the other paths.
+    Sets max_output_chars to Local Fox's smaller default, as the context of a local model is small.
     """
     result = {}
     for key, value in config.items():
@@ -155,6 +157,9 @@ def _with_instructions(config: dict, folder: str) -> dict:
         if key == "read_only_files":
             result["instructions_file"] = f"{folder}/{INSTRUCTIONS_NAME}"
     result.setdefault("instructions_file", f"{folder}/{INSTRUCTIONS_NAME}")
+    # A tool response may take this many characters (about 4 per token): the tools' default of 40 000 is about a third
+    # of a 32 000-token context, so a few outlines or reads filled it
+    result["max_output_chars"] = MAX_OUTPUT_CHARS
     return result
 
 def _template_files(folder: str) -> dict[str, bytes]:

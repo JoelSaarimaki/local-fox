@@ -40,7 +40,8 @@ def entry_markdown(entry: Entry) -> str:
     if entry.kind == c.TOOL:
         target = main_argument(entry.args)
         args = json.dumps(entry.args, indent=2, ensure_ascii=False) if isinstance(entry.args, dict) else str(entry.args)
-        return (f"### Tool call: {entry.tool}{' ' + target if target else ''} ({entry.status})\n\n"
+        removed = ", response later removed from the model's context" if entry.removed else ""
+        return (f"### Tool call: {entry.tool}{' ' + target if target else ''} ({entry.status}{removed})\n\n"
                 f"Arguments:\n\n{_fence(args, 'json')}\n\nResponse:\n\n{_fence(entry.response)}")
     if entry.kind in (c.INSTRUCTIONS, c.FILEMAP, c.TOOLS):
         return f"## {entry.title}\n\n{_fence(entry.text, 'markdown' if entry.kind != c.FILEMAP else 'text')}"

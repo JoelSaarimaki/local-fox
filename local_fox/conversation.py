@@ -40,6 +40,7 @@ class Entry:
     # thinking, or the body of the instructions, filemap and tools. The session keeps the latest open.
     collapsed: bool = True
     answer_collapsed: bool = False  # Whether an assistant entry's answer shows only its first lines
+    removed: bool = False     # Whether a tool call's response was replaced with a note to make room in the context
     id: int = field(default_factory=lambda: next(_ids))
 
 def main_argument(args) -> str:

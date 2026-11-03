@@ -15,7 +15,7 @@ DEFAULTS = {
     "ollama_host": "http://127.0.0.1:11434",
     # flint:40b is preferred: its calls by bare tool names, which ollmcp skips, run in Local Fox (see AGENTS.md)
     "model": "flint:40b",
-    "num_ctx": 32000,
+    "num_ctx": 65536,
     "think": None,
     "temperature": None,
     "seed": None,
@@ -34,7 +34,8 @@ REMOVED = {"session_log", "session_log_days", "tool_calls_collapsed", "project_d
 DESCRIPTIONS = {
     "ollama_host": "Where Ollama runs.",
     "model": "The model, as Ollama names it. Also set by the model menu.",
-    "num_ctx": "The context size in tokens, sent with every request. Ollama uses 4 096 tokens when none is sent.",
+    "num_ctx": "The context size in tokens, sent with every request. Ollama uses 4 096 tokens when none is sent. A larger "
+               "context needs little memory with flint:40b, but moves more of the model from the GPU to the CPU.",
     "think": "Thinking: empty turns it on for models that can think, true or false forces it, and a level such as "
              "low or high is passed on to models that take one.",
     "temperature": "The model's temperature; empty uses the model's own.",

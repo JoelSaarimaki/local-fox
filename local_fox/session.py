@@ -101,6 +101,13 @@ class Session:
         self._created: str | None = None
         self._save_failed = False
         self.tools_config_text: str | None = None  # The tools config the servers started with
+        # Fitting the context (_fit_context): tokens per character of the requests, learned from Ollama's counts, as
+        # code has fewer characters per token than prose; and Ollama's count of the last request, to notice a cut
+        self._tokens_per_char = 1 / 3.2
+        self._last_prompt_tokens = 0
+        self._request_chars = 0
+        self._made_room = False
+        self._cut_by_ollama = False
 
     # --- Entries ---
 
@@ -242,6 +249,7 @@ class Session:
         """
         self.entries, self.messages = [], []
         self._latest = {}
+        self._last_prompt_tokens = 0
         self.saved_path, self._created = None, None
         self.allow_all = False
         self.changed_files = set()
@@ -372,6 +380,7 @@ class Session:
         """
         self._read_instructions(reloaded=True)
         self._set_system_message()
+        self._made_room = True  # The system message changed: a smaller count next is not a cut by Ollama
         self.frontend.status()
 
     def add_history(self, messages: list[dict]) -> None:
@@ -451,6 +460,7 @@ class Session:
 
     async def set_model(self, model: str) -> str | None:
         self.model = model
+        self._tokens_per_char, self._last_prompt_tokens = 1 / 3.2, 0  # Another tokenizer
         error = await self.load_model_info()
         if not error and self.max_context and self.num_ctx > self.max_context:
             self.num_ctx = self.max_context
@@ -523,10 +533,23 @@ class Session:
                     raise StopTurn()
                 steps = 0
             steps += 1
+            if not self._fit_context():
+                self.error(f"The conversation no longer fits in the context of {format_number(self.num_ctx)} tokens, even "
+                           "without the responses of the earlier tool calls, so it was not sent. Start a new conversation, "
+                           "export this one, or make the context larger.")
+                self.notice("The context is full.", ["Clear", "Export", "Larger context"])
+                return
             reply = await self._generate()
             if reply is None:
                 return
             entry, calls = reply
+            if self._cut_by_ollama:
+                await self._refuse_calls(calls)
+                self.error(f"Ollama dropped the beginning of the conversation, as it did not fit in the context of "
+                           f"{format_number(self.num_ctx)} tokens: the model no longer had all of it, perhaps not even your "
+                           "request, so the turn was stopped. Make the context larger, or start a new conversation.")
+                self.notice("The context is full.", ["Clear", "Export", "Larger context"])
+                return
             if entry.stop_reason == "length":
                 self.notice(f"The reply stopped because the context is full: {format_number(self.num_ctx)} tokens.",
                             ["Clear", "Export", "Larger context"])
@@ -536,6 +559,92 @@ class Session:
                     self.notice("The model ended its turn without a reply or a tool call.")
                 return
             await self._run_calls(calls)
+
+    # --- Fitting the context ---
+
+    def _chars(self) -> int:
+        """
+        Returns the characters of the next request: the tool definitions and the messages, without their images.
+        """
+        tools = json.dumps(self.servers.payload(), ensure_ascii=False) if self.servers else ""
+        messages = sum(len(json.dumps({k: v for k, v in m.items() if k != "images"}, ensure_ascii=False)) for m in self.messages)
+        return len(tools) + messages
+
+    def _estimate(self) -> int:
+        """
+        Estimates the tokens of the next request, with the ratio learned from Ollama's counts, and 800 per image.
+        """
+        images = sum(len(m.get("images") or []) for m in self.messages)
+        return int(self._chars() * self._tokens_per_char) + 800 * images
+
+    def _counted(self, prompt_tokens: int) -> None:
+        """
+        Takes Ollama's count of the request just sent. Ollama does not fail on a request longer than the context: it
+        drops the oldest messages. The count then is smaller than the one before, although messages were only added
+        (unless Local Fox made room itself), and the model no longer had all of the conversation.
+        """
+        if not prompt_tokens:
+            return
+        if self._last_prompt_tokens and prompt_tokens < self._last_prompt_tokens and not self._made_room:
+            self._cut_by_ollama = True
+            self.log.write("cut", prompt_tokens=prompt_tokens, before=self._last_prompt_tokens, num_ctx=self.num_ctx)
+        elif self._request_chars:
+            self._tokens_per_char = prompt_tokens / self._request_chars
+        self._last_prompt_tokens = prompt_tokens
+        self._made_room = False
+
+    def _fit_context(self) -> bool:
+        """
+        Makes the next request fit in the context, leaving room for the reply, before it is sent: if it would not
+        fit, the responses of the oldest tool calls are replaced with a short note, oldest first, until it does. The
+        responses of the latest step stay, as do all messages of the user and the model, so the model keeps its task
+        and can call a tool again for what it needs. The replaced calls are marked in the feed. Returns False if the
+        request does not fit even then. Without this, Ollama would drop the oldest messages, the user's request first.
+        """
+        budget = self.num_ctx - max(2048, self.num_ctx // 8)
+        if self._estimate() <= budget:
+            return True
+        tool_indexes = [i for i, m in enumerate(self.messages) if m.get("role") == "tool"]
+        last_reply = max((i for i, m in enumerate(self.messages) if m.get("role") == "assistant"), default=-1)
+        tool_entries = [e for e in self.entries if e.kind == c.TOOL]  # One response message per tool call, in order
+        removed, tokens = [], 0
+        for k, i in enumerate(tool_indexes):
+            if i > last_reply:
+                break  # The responses to the latest step
+            message = self.messages[i]
+            entry = tool_entries[k] if len(tool_entries) == len(tool_indexes) else None
+            if (entry and entry.removed) or len(message.get("content", "")) < 400:
+                continue
+            size = int(len(message["content"]) * self._tokens_per_char)
+            name = entry.tool if entry else message.get("tool_name", "tool")
+            target = main_argument(entry.args) if entry else ""
+            self.messages[i] = {k2: v for k2, v in message.items() if k2 != "images"} | {"content": (
+                f"[Removed by Local Fox to make room in the context: the response of {name}{' ' + target if target else ''}, "
+                f"about {format_number(size)} tokens. Call the tool again if you need it.]")}
+            if entry:
+                entry.removed = True
+                self._update(entry)
+            removed.append(f"{name} {target}".strip())
+            tokens += size
+            if self._estimate() <= budget:
+                break
+        if removed:
+            self._made_room = True
+            self.log.write("made_room", removed=removed, tokens=tokens, estimate=self._estimate(), budget=budget)
+            self.notice(f"To fit the context, the responses of {len(removed)} earlier tool call{'s' if len(removed) > 1 else ''} "
+                        f"(about {format_number(tokens)} tokens) were replaced with a note for the model, which can call them "
+                        "again. They are marked in the feed.")
+            self.used_tokens = self._estimate()
+            self.frontend.status()
+        return self._estimate() <= budget
+
+    async def _refuse_calls(self, calls: list) -> None:
+        """
+        Answers the tool calls of a reply that is not acted on, so that every call has its response.
+        """
+        for call in calls:
+            entry = self.add(Entry(c.TOOL, tool=call.function.name, args=call.function.arguments, status=c.WAITING))
+            self._respond(entry, STOPPED_BEFORE, c.STOPPED)
 
     async def _decide(self, question: str, options: list[str], entry: Entry | None) -> str:
         """
@@ -579,6 +688,8 @@ class Session:
         tools = (self.servers.payload() if self.servers else None) or None
         think = self.think_setting()
         self._log_request(tools, think)
+        self._request_chars = self._chars()
+        self._cut_by_ollama = False
 
         def log_reply(**fields):
             self.log.write("reply", content=entry.text, thinking=entry.thinking or None, done_reason=entry.stop_reason,
@@ -601,6 +712,7 @@ class Session:
                 if chunk.done:
                     entry.stop_reason = chunk.done_reason or "stop"
                     self.used_tokens = (chunk.prompt_eval_count or 0) + (chunk.eval_count or 0) or self.used_tokens
+                    self._counted(chunk.prompt_eval_count or 0)
                     counts = {"prompt_tokens": chunk.prompt_eval_count, "output_tokens": chunk.eval_count,
                               "load_seconds": _seconds(getattr(chunk, "load_duration", None)),
                               "prompt_seconds": _seconds(getattr(chunk, "prompt_eval_duration", None)),
