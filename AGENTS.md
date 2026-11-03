@@ -169,8 +169,12 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 - **What is open in the feed** is decided by the session (`Session._open_latest`): the latest tool call, thinking
   and answer are open, and opening a newer one collapses only the one before it, so what the user opened stays
   open. `Entry.collapsed` is a tool call's body or an assistant entry's thinking; `Entry.answer_collapsed` is
-  its answer. Prompts are never collapsible. The feed re-renders the whole document on each change (`setHtml`),
-  so its cost grows with what is open; keeping old entries collapsed is also what keeps long sessions fast.
+  its answer. Prompts are never collapsible.
+- **The feed writes each entry in a frame of its own** (`ui/feed.py`): an update rewrites only the frames whose HTML
+  changed (no `setHtml` of the whole document, which flashed and grew slow), and sets a frame's format only when its
+  box state changes, as that lays the whole document out again. An expanded tool call, instructions, filemap or tools
+  entry is boxed (`theme.EXPANDED`). The view follows the end only for new content (`render(follow=True)`), never when
+  the user opens or closes an entry. Long lines in `<pre>` wrap (`white-space: pre-wrap`).
 - Bash heredocs that contain Python with quotes have failed to parse in this environment; write longer patch
   scripts to the scratchpad and run them, or use the Edit tool.
 

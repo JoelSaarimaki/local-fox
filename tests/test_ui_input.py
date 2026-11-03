@@ -104,3 +104,53 @@ def test_own_changes_to_the_tools_config_are_not_reported_as_outside(app, tmp_pa
     finally:
         window.session = None
         window.close()
+
+def _feed(app, entries, height=300):
+    from local_fox.ui.feed import Feed
+    feed = Feed(QApplication.font())
+    feed.resize(700, height)
+    feed.show()
+    feed.set_entries(entries)
+    app.processEvents()
+    return feed
+
+def test_streaming_writes_only_the_changed_entry(app):
+    entries = [c.Entry(c.USER, text="Question"), c.Entry(c.ASSISTANT, text="An answer", streaming=True)]
+    feed = _feed(app, entries)
+    first_frame = feed._frames[0][1]
+    first_text = first_frame.firstCursorPosition().block().text()
+    changes = []
+    feed.document().contentsChange.connect(lambda position, removed, added: changes.append(position))
+    entries[1].text += " that grows"
+    feed.render()
+    assert feed._frames[0][1] is first_frame and first_frame.firstCursorPosition().block().text() == first_text
+    assert changes and min(changes) >= feed._frames[1][1].firstPosition() - 1  # Nothing before the reply was touched
+    assert "that grows" in feed.toPlainText()
+
+def test_opening_an_entry_does_not_move_the_view(app):
+    from PySide6.QtCore import QUrl
+    entries = [c.Entry(c.USER, text=f"Line {i}") for i in range(40)]
+    call = c.Entry(c.TOOL, tool="read_file_with_metadata", args={"path": "a.py"}, status=c.OK,
+                   response="\n".join(f"line {i}" for i in range(80)), collapsed=True)
+    entries.append(call)
+    feed = _feed(app, entries)
+    feed.scroll_to_bottom()
+    before = feed.verticalScrollBar().value()
+    feed._clicked(QUrl(f"toggle:{call.id}"))  # The user opens the last tool call
+    app.processEvents()
+    assert not call.collapsed and feed.verticalScrollBar().value() == before
+    entries.append(c.Entry(c.ASSISTANT, text="New content from the model"))
+    feed.render()  # New content still follows the end when the view is at it
+    feed.scroll_to_bottom()
+    assert feed.verticalScrollBar().value() == feed.verticalScrollBar().maximum()
+
+def test_long_lines_wrap_and_an_open_tool_call_is_boxed(app):
+    from local_fox.ui import theme
+    call = c.Entry(c.TOOL, tool="read_file_with_metadata", args={"path": "a.py"}, status=c.OK,
+                   response="```text\n" + "x" * 600 + "\n```", collapsed=False)
+    feed = _feed(app, [call])
+    assert feed.document().size().width() <= feed.viewport().width() + 1  # No line runs past the feed
+    assert feed._frames[0][1].frameFormat().background().color().name() == theme.EXPANDED
+    call.collapsed = True
+    feed.render(follow=False)
+    assert feed._frames[0][1].frameFormat().background().style() == Qt.NoBrush
