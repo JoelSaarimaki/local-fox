@@ -153,3 +153,11 @@ def test_the_config_names_the_instructions(tmp_path, home):
     config["instructions_file"] = "docs/ai.md"
     (project / ".local-fox" / "tools-config.json").write_text(json.dumps(config), encoding="utf-8")
     assert instructions_path(project) == (project / "docs" / "ai.md").resolve()
+
+def test_commands_start_empty_with_examples(tmp_path, home):
+    project = tmp_path / "project"
+    project.mkdir()
+    tools_setup.set_up(project)
+    assert json.loads((project / ".local-fox" / "commands.json").read_text(encoding="utf-8")) == {}
+    examples = json.loads((project / ".local-fox" / "commands-examples.json").read_text(encoding="utf-8"))
+    assert "run_tests" in examples

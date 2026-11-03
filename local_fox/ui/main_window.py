@@ -18,7 +18,7 @@ from .. import recent_projects, saved_conversations, tools_config, tools_setup
 from ..conversation import format_number
 from ..export import to_markdown
 from ..filemap import Rules, tools_config_path
-from ..session import Session
+from ..session import RESTART_TOOLS, Session
 from ..session_log import LOG_NAME
 from . import theme
 from .bridge import AsyncRunner, Bridge, QtFrontend
@@ -45,7 +45,6 @@ HELP = f"""Commands:
 Keys: Enter sends, Shift+Enter adds a line, Up and Down recall sent messages, Esc stops the model.
 Right-click a file in the filemap to add its path to the prompt."""
 
-RESTART_TOOLS = "Restart tools and clear"
 REOPEN = "Reopen it"
 
 def _button(text: str, slot, name: str = "", tip: str = "") -> QPushButton:

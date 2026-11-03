@@ -160,6 +160,12 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   still have the `dev_` names; the name resolution covers them. `tools/compare.py` uses Local Fox's template by
   default (`--instructions tools` for the tools' one). The template is package data (pyproject, and the spec's `datas`).
 - Notices in the feed are plain text with their line breaks kept (`render.py`), not Markdown.
+- **Errors in the feed are orange** (`.error` uses `ACCENT`), and say what to try: Ollama's errors go through
+  `ollama_errors.explain` / `explain_connection`, which add an explanation before Ollama's own message. Add a case there
+  for a new failure that users meet, with a test in `tests/test_ollama_errors.py`.
+- **`commands.json` starts empty** in a new project (in Local Fox and in the tools' init); `commands-examples.json`
+  beside it has the former default commands to copy from, and nothing reads it. The tools' comparison harness copies
+  the examples in, as its scenarios run tests.
 - **What is open in the feed** is decided by the session (`Session._open_latest`): the latest tool call, thinking
   and answer are open, and opening a newer one collapses only the one before it, so what the user opened stays
   open. `Entry.collapsed` is a tool call's body or an assistant entry's thinking; `Entry.answer_collapsed` is

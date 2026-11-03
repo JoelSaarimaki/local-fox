@@ -308,3 +308,28 @@ def test_filemap_and_instructions_are_read_again_before_the_first_prompt(tmp_pat
     (tmp_path / "after_the_first.py").write_text("z = 3\n", encoding="utf-8")
     asyncio.run(session.send("Again"))
     assert "after_the_first.py" not in session.messages[0]["content"]  # The system message stays as the model got it
+
+def test_out_of_memory_is_explained_in_the_feed(tmp_path):
+    import ollama
+    session, client, _ = make_session(tmp_path, [])
+
+    async def chat(**kwargs):
+        raise ollama.ResponseError("model requires more system memory (40 GiB) than is available (31 GiB)", 500)
+    client.chat = chat
+    asyncio.run(session.send("Hi"))
+    error = session.entries[-1]
+    assert error.kind == c.ERROR and "ran out of memory with a context of 32 000 tokens" in error.text
+    assert "Ollama's message: model requires more system memory" in error.text
+
+def test_a_stopped_tools_server_is_reported(tmp_path):
+    from local_fox.session import RESTART_TOOLS
+    session, _, mcp = make_session(tmp_path, [[chunk(tool_calls=[call("read_file_with_metadata", {"path": "a.py"})], done=True)],
+                                              [chunk("I cannot read it.", done=True)]], ["Allow"])
+
+    async def call_tool(name, args):
+        raise RuntimeError("Connection closed")
+    mcp.call_tool = call_tool
+    asyncio.run(session.send("Read a.py"))
+    assert "the tools' server stopped" in tool_messages(session)[0]
+    assert any(e.kind == c.ERROR and "stopped, so the tools cannot run" in e.text for e in session.entries)
+    assert any(e.kind == c.NOTICE and e.actions == [RESTART_TOOLS] for e in session.entries)

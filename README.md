@@ -48,7 +48,9 @@ Local Fox starts by asking for the project, before the window opens:
   | In `.local-fox` | What |
   |---|---|
   | `instructions.md` | The project instructions, given to the model at the start of every conversation |
-  | `tools-config.json`, `commands.json` | The tools' config and the commands the AI may run |
+  | `tools-config.json` | The tools' config; `instructions_file` names the instructions |
+  | `commands.json` | The commands the AI may run: **empty at first**, so it runs none until you add them |
+  | `commands-examples.json` | Commands for common Python and npm projects, to copy into `commands.json`; nothing reads it |
   | `context/` | The AI's plans; the only part of the folder the tools may use |
   | `conversations/` | The saved conversations (below) |
   | `suggested-commands.json`, `.gitignore` | Commands the AI suggested; what is each person's own (plans, suggestions, conversations) |
@@ -184,6 +186,21 @@ not written, only their number.
   sent back to the model in later requests.
 - **Images** from `read_image` are passed to models with the vision capability; for others the feed says they
   were not passed.
+
+## When something goes wrong
+
+Errors are shown in the feed in orange, with what to try first and the original message after it. Local Fox
+recognizes these:
+
+| What happened | What the feed suggests |
+|---|---|
+| The model ran out of memory (GPU or system) | A smaller context, closing other programs that use the GPU, or a smaller model |
+| The model's runner process stopped | Often memory as well; where Ollama's log is |
+| The model took too long to load | Asking again; a smaller context or model if it repeats |
+| Ollama is not running or not reachable | Starting Ollama; checking `ollama_host` |
+| Ollama closed the connection in the middle of a reply | Asking again; Ollama's log |
+| The model is not installed, cannot call tools, or cannot think | `ollama pull`, another model, or the `think` setting |
+| The tools' server stopped | **Restart tools and clear**; its log in `logs/server-<key>.log` (the model is told not to call tools until then) |
 
 ## Stopping and continuing
 

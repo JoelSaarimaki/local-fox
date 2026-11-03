@@ -173,6 +173,8 @@ def _template_files(folder: str) -> dict[str, bytes]:
         ".mcp.json": dump({"mcpServers": {"dev": _tools_server(folder)}}),
         f"{folder}/{CONFIG_NAME}": dump(_with_instructions(_in_folder(load("tools-config.json"), folder), folder)),
         f"{folder}/commands.json": (templates / "commands.json").read_bytes(),
+        # Commands for common projects to copy into commands.json, which starts empty; nothing reads this file
+        f"{folder}/commands-examples.json": (templates / "commands-examples.json").read_bytes(),
         f"{folder}/{INSTRUCTIONS_NAME}": instructions.encode("utf-8"),
         f"{folder}/.gitignore": gitignore.encode("utf-8"),
         f"{folder}/suggested-commands.json": (templates / "suggested-commands.json").read_bytes(),
@@ -306,7 +308,8 @@ def set_up(project: Path) -> str:
     lines += [f"- Already there, not changed: {path}" for path in skipped]
     lines += ["", "Next:", "",
               f"1. {dir_line}",
-              f"2. {folder}/commands.json: keep the commands that fit this project, and change or delete the rest.",
+              f"2. {folder}/commands.json is empty, so the AI can run no commands yet: copy the ones that fit this project "
+              f"from {folder}/commands-examples.json (which nothing reads) and change them as needed.",
               f"3. {folder}/{INSTRUCTIONS_NAME}: adapt the instructions to the project, e.g. its documents at the end, and remove "
               "the tools you disable. Local Fox gives them to the model at the start of every session.",
               f"4. Web search: add your Ollama API key to {USER_CONFIG_PATH}. Without one the web tools are not offered.",

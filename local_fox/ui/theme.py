@@ -13,7 +13,7 @@ ACCENT = "#e8913a"     # Fox orange: headings, links, changed files, the prompt 
 CODE = "#e3c48f"       # Inline code
 CODE_BG = "#222222"
 OK = "#8fbf7f"
-ERROR = "#e06c6c"
+ERROR = "#e06c6c"       # Removed lines of an edit; errors in the feed are ACCENT
 
 FONT_FAMILIES = ["Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Courier New"]
 
@@ -91,7 +91,7 @@ def feed_css() -> str:
     .dim {{ color: {DIM}; }}
     .thinking {{ color: {DIM}; }}
     .notice {{ color: {DIM}; }}
-    .error {{ color: {ERROR}; }}
+    .error {{ color: {ACCENT}; }}  /* Errors in the feed are orange, as the rest of what needs the user's attention */
     .ok {{ color: {OK}; }}
     .added {{ color: {OK}; }}
     .removed {{ color: {ERROR}; }}

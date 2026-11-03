@@ -21,9 +21,11 @@ from .config import data_dir
 from .conversation import Entry, estimate_tokens, format_number, main_argument
 from .filemap import Rules, instructions_path, model_filemap, tools_config_path
 from .mcp_servers import Servers
+from .ollama_errors import explain, explain_connection
 from .session_log import LOG_NAME, SessionLog
 
 WRITE_TOOLS = {"write_file", "edit_file", "move_file", "delete_file", "restore_file"}
+RESTART_TOOLS = "Restart tools and clear"  # The action that restarts the MCP servers (the window does it)
 APPROVAL_OPTIONS = ["Allow", "Allow all for this session", "Skip", "Stop"]
 SKIPPED_RESPONSE = "The user skipped this call."
 STOPPED_BEFORE = "The user stopped the session before this call ran."
@@ -224,9 +226,9 @@ class Session:
         try:
             info = await self.client.show(self.model)
         except ollama.ResponseError as error:
-            return f"Ollama does not have the model {self.model}: {error.error}"
+            return explain(error.error, self.model, self.num_ctx)
         except (httpx.HTTPError, ConnectionError) as error:
-            return f"Cannot reach Ollama at {self.config['ollama_host']}: {error}"
+            return explain_connection(error, self.config["ollama_host"])
         self.capabilities = list(info.capabilities or [])
         for key, value in (info.modelinfo or {}).items():
             if key.endswith(".context_length") and isinstance(value, int):
@@ -605,13 +607,13 @@ class Session:
             entry.streaming = False
             self._update(entry)
             log_reply(error=error.error)
-            self.error(f"Ollama: {error.error}")
+            self.error(explain(error.error, self.model, self.num_ctx))
             return None
         except (httpx.HTTPError, ConnectionError) as error:
             entry.streaming = False
             self._update(entry)
             log_reply(error=str(error))
-            self.error(f"Cannot reach Ollama at {self.config['ollama_host']}: {error}")
+            self.error(explain_connection(error, self.config["ollama_host"]))
             return None
         entry.streaming = False
         if entry.stop_reason == "length":
@@ -719,7 +721,16 @@ class Session:
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            self._respond(entry, f"Error: the call to {tool.exposed} failed: {error}", c.FAILED)
+            if _server_stopped(error):
+                # Every later call would fail the same way, so the model is told to stop calling tools, and the user
+                # is offered the restart; the cause, often a lack of memory, is in the server's log
+                self._respond(entry, f"Error: the tools' server stopped, so {tool.exposed} could not run. Do not call tools "
+                                     "until the user has restarted them.", c.FAILED)
+                self.error(f"The tools' server '{tool.server}' stopped, so the tools cannot run. Restarting them starts a new "
+                           f"conversation. The end of its log is in {(self.log_dir / f'server-{tool.server}.log').as_posix()}.")
+                self.notice("Restart the tools?", [RESTART_TOOLS])
+            else:
+                self._respond(entry, f"Error: the call to {tool.exposed} failed: {error}", c.FAILED)
             return
         text = "".join(getattr(part, "text", "") for part in result.content)
         images = [(part.data, getattr(part, "mime_type", None) or getattr(part, "mimeType", "")) for part in result.content if getattr(part, "type", "") == "image"]
@@ -738,6 +749,13 @@ class Session:
                     path = Path(args[key])
                     self.changed_files.add((path if path.is_absolute() else self.rules.base / path).resolve())
             self.frontend.status()
+
+def _server_stopped(error: BaseException) -> bool:
+    """
+    Checks if a tool call failed because its server process is gone: the MCP client's streams are closed.
+    """
+    names = {type(e).__name__ for e in (error, error.__cause__, error.__context__) if e is not None}
+    return bool(names & {"ClosedResourceError", "BrokenResourceError", "EndOfStream"}) or "connection closed" in str(error).lower()
 
 def _seconds(nanoseconds) -> float | None:
     """
