@@ -162,7 +162,9 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 - **Instructions template**: the setup writes Local Fox's own `local_fox/templates/instructions.md` into a project,
   not the tools' template, which names the tools with ollmcp's `dev_` prefix and is written for ollmcp's start.
   It follows the workflow of the tools' template; when that template's workflow changes, carry the change over.
-  It must name only existing tools (a test checks this against the tools' `TOOLSETS`). Projects set up earlier
+  It must name only existing tools (a test checks this against the tools' `TOOLSETS`). Measure any shortening with
+  `tools/compare.py`: a version of about 930 tokens (2026-11-03, kept in `local-only/`) kept the modes but read the
+  needed files first in 6 of 14 runs instead of 11 of 14 (results in ollmcp-generic-tools' local_ai_test_results.md). Projects set up earlier
   still have the `dev_` names; the name resolution covers them. `tools/compare.py` uses Local Fox's template by
   default (`--instructions tools` for the tools' one). The template is package data (pyproject, and the spec's `datas`).
 - Notices in the feed are plain text with their line breaks kept (`render.py`), not Markdown.

@@ -248,7 +248,7 @@ being saved to the same file. A clear starts a new file. Delete the files you do
 The core (`local_fox` without `local_fox.ui`) needs only `ollama` and `mcp`. A small command line runs it:
 
 ```bash
-python -m local_fox.cli --project <folder> [--model flint:40b] [--context 32000] [--yes] [--verbose] [--setup] ["first message"]
+python -m local_fox.cli --project <folder> [--model flint:40b] [--context 65536] [--yes] [--verbose] [--setup] ["first message"]
 # The folder must be a project; --setup sets it up first (never a drive root or system folder)
 ```
 
