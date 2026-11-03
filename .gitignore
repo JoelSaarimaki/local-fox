@@ -185,3 +185,5 @@ cython_debug/
 runs/
 # The executable's PyInstaller spec is source, not generated (the template above ignores *.spec)
 !packaging/local_fox.spec
+# Local notes that are not published, e.g. the original design plan
+local-only/
