@@ -102,7 +102,10 @@ def test_a_mcp_json_of_other_applications_is_not_a_project(tmp_path, home):
     project.mkdir()
     (project / ".mcp.json").write_text(json.dumps({"mcpServers": {"other": {"command": "node", "args": ["x.js"]}}}), encoding="utf-8")
     assert not tools_setup.is_set_up(project)
-    assert any("server 'dev' added" in change for change in tools_setup.planned(project))
+    changed, created = tools_setup.plan(project)
+    assert changed == ["The existing .mcp.json has no server for the tools. The server 'dev' is added to it; "
+                       "its other servers stay as they are."]
+    assert ".mcp.json" not in created  # A change to the existing file, not a new file
     assert not (project / ".local-fox").exists()  # Planning creates nothing
     tools_setup.set_up(project)
     servers = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
@@ -127,9 +130,10 @@ def test_a_mcp_json_naming_a_missing_config_gets_local_fox(tmp_path, home):
     (project / ".mcp.json").write_text(json.dumps({"mcpServers": {"dev": {"command": "python", "args": ["-m", "ollmcp_tools"],
                                        "env": {"MCP_TOOLS_CONFIG": ".ollmcp-tools/tools-config.json"}}}}), encoding="utf-8")
     assert project_folder(project) == project / ".local-fox"
-    plan = tools_setup.planned(project)
-    assert any("pointed to .local-fox/tools-config.json" in change for change in plan)
-    assert not any(".ollmcp-tools/" in change and "Created" in change for change in plan)
+    changed, created = tools_setup.plan(project)
+    assert len(changed) == 1 and "names .ollmcp-tools/tools-config.json, which does not exist" in changed[0]
+    assert "changed to use .local-fox/tools-config.json" in changed[0]
+    assert all(item.startswith(".local-fox/") for item in created)  # Nothing in .ollmcp-tools, no new .mcp.json
     tools_setup.set_up(project)
     server = json.loads((project / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["dev"]
     assert server["env"]["MCP_TOOLS_CONFIG"] == ".local-fox/tools-config.json"

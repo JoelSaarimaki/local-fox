@@ -43,6 +43,7 @@ def stylesheet(font_size: int) -> str:
     QListWidget::item:disabled, QListWidget::item:disabled:hover {{ background-color: transparent; color: {DARK}; }}
     QLabel#dim {{ color: {DIM}; }}
     QLabel#accent {{ color: {ACCENT}; font-weight: bold; }}
+    QLabel#accent-text {{ color: {ACCENT}; }}
     QLabel#title {{ color: {ACCENT}; font-weight: bold; font-size: {font_size + 4}pt; }}
     QLabel#version {{ color: {DIM}; font-size: {font_size + 4}pt; }}
     QLabel#error {{ color: {ERROR}; }}

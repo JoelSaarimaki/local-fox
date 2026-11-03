@@ -159,25 +159,37 @@ class ProjectDialog(_NoEnterDialog):
             self.chosen = Path(folder)
             self.accept()
 
+def _text(text: str, style: str) -> QLabel:
+    """
+    Returns a wrapped, selectable paragraph of the setup question.
+    """
+    label = QLabel(text, objectName=style)
+    label.setWordWrap(True)
+    label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+    label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+    return label
+
 class SetupDialog(_NoEnterDialog):
     """
-    The question for a folder that is not a project: what setting it up creates, with Create .local-fox and Back.
+    The question for a folder that is not a project: what setting it up changes in existing files (on its own, in the
+    accent color) and what it creates, with "Create .local-fox" and "Back".
     A folder that must not be set up gets the reason and Back only. exec() returns Accepted for Create, BACK for
     Back, and Rejected when it is closed.
     """
 
     def __init__(self, project: Path, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"{APP_NAME}: set up a project")
-        self.resize(760, 420)
+        self.setWindowTitle("Set up a project")
+        self.resize(760, 440)
         layout = QVBoxLayout(self)
         reason = tools_setup.refusal(project)
-        changes: list[str] = []
+        changed: list[str] = []
+        created: list[str] = []
         if not reason and not tools_setup.bundled_version():
             reason = "This Local Fox has no bundled tools to set it up with."
         if not reason:
             try:
-                changes = tools_setup.planned(project)
+                changed, created = tools_setup.plan(project)
             except tools_setup.SetupRefused as error:
                 reason = str(error)
         title = "This folder cannot be a project" if reason else "Set up this folder as a project?"
@@ -186,18 +198,20 @@ class SetupDialog(_NoEnterDialog):
         path.setTextInteractionFlags(Qt.TextSelectableByMouse)
         path.setWordWrap(True)
         layout.addWidget(path)
+        layout.addSpacing(6)
         if reason:
-            text = f"{reason}\n\nGo back and choose a project's own folder."
+            layout.addWidget(_text(f"{reason}\n\nGo back and choose a project's own folder.", "error"), 1)
         else:
-            listed = "\n".join(f"    {change}" for change in changes)
-            text = (f"It is not a project yet. Setting it up creates or changes:\n\n{listed}\n\nThe AI's tools can then read and "
-                    "change the files in this folder and its subfolders, except the paths you forbid. Nothing is created "
-                    "unless you choose \"Create .local-fox\".")
-        body = QLabel(text, objectName="dim" if not reason else "error")
-        body.setWordWrap(True)
-        body.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        body.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        layout.addWidget(body, 1)
+            # A change to an existing file comes first and stands out: read as one more item of the list, it would be
+            # taken for a new file, and the reason for it missed
+            for change in changed:
+                layout.addWidget(_text(change, "accent-text"))
+            if changed:
+                layout.addSpacing(6)
+            listed = "\n".join(f"    {item}" for item in created)
+            layout.addWidget(_text(f"Setting it up creates:\n\n{listed}\n\nThe AI's tools can then read and change the files "
+                                   "in this folder and its subfolders, except the paths you forbid. Nothing is created or "
+                                   "changed unless you choose \"Create .local-fox\".", "dim"), 1)
         buttons = QHBoxLayout()
         buttons.addWidget(_button("Back", lambda: self.done(BACK)))
         buttons.addStretch(1)

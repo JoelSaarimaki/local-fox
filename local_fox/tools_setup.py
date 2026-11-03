@@ -165,18 +165,20 @@ def _template_files(folder: str) -> dict[str, bytes]:
         f"{folder}/suggested-commands.json": (templates / "suggested-commands.json").read_bytes(),
     }
 
-def _apply(project: Path, write: bool) -> tuple[str, list[str], list[str]]:
+def _apply(project: Path, write: bool) -> tuple[str, list[str], list[str], list[str]]:
     """
-    Creates the project's missing files, or with write False only lists them. Returns the project's folder name
-    and what was (or would be) created or changed, and what is already there. A .mcp.json that exists without the
-    tools' server gets it added, the only existing file the setup changes. Raises SetupRefused.
+    Creates the project's missing files, or with write False only lists them. Returns the project's folder name, the
+    changes to existing files, the files created, and what is already there. The changes are whole sentences, as the
+    setup question shows them apart from the created files: they are the surprising part. The only existing file the
+    setup changes is .mcp.json: the tools' server is added to it, or, if it names a tools config that does not exist
+    (left from an earlier setup), pointed to the new one. Raises SetupRefused.
     """
     reason = refusal(project)
     if reason:
         raise SetupRefused(reason)
     folder_path = project_folder(project)
     folder = folder_path.relative_to(project).as_posix() if folder_path.is_relative_to(project) else PROJECT_FOLDER
-    created, skipped = [], []
+    changed, created, skipped = [], [], []
     mcp = project / ".mcp.json"
     mcp_existed = mcp.exists()
     if mcp_existed:
@@ -189,29 +191,31 @@ def _apply(project: Path, write: bool) -> tuple[str, list[str], list[str]]:
             raise SetupRefused(f"{mcp.as_posix()} cannot be read ({error}). Fix it, or move it away, and set up again.") from None
         tools_servers = [(key, spec) for key, spec in servers.items() if isinstance(spec, dict) and runs_the_tools(spec)]
         config = (project / folder / CONFIG_NAME).resolve()
-        if tools_servers:
-            moved = False
-            for key, spec in tools_servers:
-                env = spec.get("env") if isinstance(spec.get("env"), dict) else {}
-                named = env.get("MCP_TOOLS_CONFIG")
-                named_path = (Path(named) if Path(named).is_absolute() else project / named).resolve() if named else None
-                if named_path != config:
-                    # Left from an earlier setup, naming a config that is gone: the server is pointed to the new one
-                    created.append(f".mcp.json: the tools' server '{key}' pointed to {folder}/{CONFIG_NAME}"
-                                   + (f" (it named {named}, which does not exist)" if named else ""))
-                    if write:
-                        spec["env"] = {**env, "MCP_TOOLS_CONFIG": f"{folder}/{CONFIG_NAME}"}
-                        moved = True
-            if moved:
-                mcp.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
-            elif not any(c.startswith(".mcp.json") for c in created):
-                skipped.append(".mcp.json")
-        else:
+        new_config = f"{folder}/{CONFIG_NAME}"
+        moved = False
+        for key, spec in tools_servers:
+            env = spec.get("env") if isinstance(spec.get("env"), dict) else {}
+            named = env.get("MCP_TOOLS_CONFIG")
+            named_path = (Path(named) if Path(named).is_absolute() else project / named).resolve() if named else None
+            if named_path != config:
+                # Left from an earlier setup, naming a config that is gone: the server is pointed to the new one
+                was = f"names {named}, which does not exist" if named else "names no tools config"
+                changed.append(f"The existing .mcp.json has a server for the tools, '{key}', that {was}. It is changed "
+                               f"to use {new_config}; the rest of the file stays as it is.")
+                if write:
+                    spec["env"] = {**env, "MCP_TOOLS_CONFIG": new_config}
+                    moved = True
+        if not tools_servers:
             key = next(k for k in ("dev", "local-fox-tools", "local-fox-tools-2") if k not in servers)
-            created.append(f".mcp.json: the tools' server '{key}' added to the existing file")
+            changed.append(f"The existing .mcp.json has no server for the tools. The server '{key}' is added to it; "
+                           "its other servers stay as they are.")
             if write:
                 servers[key] = _tools_server(folder)
-                mcp.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
+                moved = True
+        if moved:
+            mcp.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
+        if not changed:
+            skipped.append(".mcp.json")
     for rel, content in _template_files(folder).items():
         if rel == ".mcp.json" and mcp_existed:
             continue  # Handled above
@@ -228,13 +232,22 @@ def _apply(project: Path, write: bool) -> tuple[str, list[str], list[str]]:
         (skipped if path.is_dir() else created).append(f"{folder}/{sub}/")
         if write:
             path.mkdir(parents=True, exist_ok=True)
-    return folder, created, skipped
+    return folder, changed, created, skipped
+
+def plan(project: Path) -> tuple[list[str], list[str]]:
+    """
+    Returns what setting up the folder would change in existing files, and the files it would create, for the user
+    to confirm first. Raises SetupRefused.
+    """
+    _, changed, created, _ = _apply(Path(project).resolve(), write=False)
+    return changed, created
 
 def planned(project: Path) -> list[str]:
     """
-    Returns what setting up the folder would create or change, for the user to confirm first. Raises SetupRefused.
+    Returns all that setting up the folder would change or create, the changes first; empty if nothing is missing.
     """
-    return _apply(Path(project).resolve(), write=False)[1]
+    changed, created = plan(project)
+    return changed + created
 
 def set_up(project: Path) -> str:
     """
@@ -253,7 +266,7 @@ def set_up(project: Path) -> str:
                            "build.ps1, or install the tools into the environment it runs in.")
     from ollmcp_tools.locations import USER_CONFIG_PATH, default_backup_folder
     project = Path(project).resolve()
-    folder, created, skipped = _apply(project, write=True)
+    folder, changed, created, skipped = _apply(project, write=True)
     if USER_CONFIG_PATH.exists():
         skipped.append(str(USER_CONFIG_PATH))
     else:
@@ -275,6 +288,7 @@ def set_up(project: Path) -> str:
         dir_line = f"{folder}/{CONFIG_NAME} cannot be read ({error}). Fix it before the tools can start."
 
     lines = [f"Set up {project.as_posix()}:", ""]
+    lines += [f"Changed: {change}" for change in changed] + ([""] if changed else [])
     lines += [f"- Created: {path}" for path in created]
     lines += [f"- Already there, not changed: {path}" for path in skipped]
     lines += ["", "Next:", "",
