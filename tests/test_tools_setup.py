@@ -139,3 +139,17 @@ def test_a_mcp_json_naming_a_missing_config_gets_local_fox(tmp_path, home):
     assert server["env"]["MCP_TOOLS_CONFIG"] == ".local-fox/tools-config.json"
     assert (project / ".local-fox" / "tools-config.json").exists() and not (project / ".ollmcp-tools").exists()
     assert tools_setup.is_set_up(project) and tools_setup.planned(project) == []
+
+def test_the_config_names_the_instructions(tmp_path, home):
+    from local_fox.filemap import instructions_path
+    project = tmp_path / "project"
+    project.mkdir()
+    tools_setup.set_up(project)
+    config = json.loads((project / ".local-fox" / "tools-config.json").read_text(encoding="utf-8"))
+    assert config["instructions_file"] == ".local-fox/instructions.md"
+    assert list(config).index("instructions_file") == list(config).index("read_only_files") + 1
+    assert instructions_path(project) == (project / ".local-fox" / "instructions.md").resolve()
+    # Another file, named in the config, relative to project_dir as the tools' other paths
+    config["instructions_file"] = "docs/ai.md"
+    (project / ".local-fox" / "tools-config.json").write_text(json.dumps(config), encoding="utf-8")
+    assert instructions_path(project) == (project / "docs" / "ai.md").resolve()

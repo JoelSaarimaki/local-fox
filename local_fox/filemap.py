@@ -67,9 +67,21 @@ def project_folder(project: Path) -> Path:
 
 def instructions_path(project: Path) -> Path:
     """
-    Returns the path of the project instructions, in the project's Local Fox folder.
+    Returns the path of the project instructions: the tools config's instructions_file, relative to its project_dir
+    as the tools' other paths, or else instructions.md next to the tools config (projects set up before the setting).
     """
-    return project_folder(project) / INSTRUCTIONS_NAME
+    config_path = tools_config_path(project)
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        config = {}
+    value = config.get("instructions_file") if isinstance(config, dict) else None
+    if isinstance(value, str) and value.strip():
+        project_dir = config.get("project_dir")
+        base = (config_path.parent / project_dir).resolve() if isinstance(project_dir, str) else Path(project).resolve()
+        path = Path(value.strip())
+        return path if path.is_absolute() else (base / path).resolve()
+    return config_path.parent / INSTRUCTIONS_NAME
 
 class Rules:
     """

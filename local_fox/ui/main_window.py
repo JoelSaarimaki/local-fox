@@ -110,15 +110,15 @@ class MainWindow(QMainWindow):
         menu_button.setText("≡")
         menu_button.setPopupMode(QToolButton.InstantPopup)
         menu = QMenu(self)
-        menu.addAction("Open project…", self._open_project)
+        menu.addAction("Open project", self._open_project)
         self.conversations_menu = menu.addMenu("Conversations")
         self.conversations_menu.aboutToShow.connect(self._fill_conversations_menu)
         menu.addAction("Clear", self._clear)
-        menu.addAction("Export…", self._export)
+        menu.addAction("Export", self._export)
         menu.addAction("Reload instructions", self._reload_instructions)
-        menu.addAction("Set up project…", lambda: self._set_up())
-        menu.addAction("Context size…", self._ask_context)
-        menu.addAction("Settings…", self._open_settings)
+        menu.addAction("Set up project", lambda: self._set_up())
+        menu.addAction("Context size", self._ask_context)
+        menu.addAction("Settings", self._open_settings)
         menu.addAction("Open config folder", self._open_config)
         menu.addAction("Open log", self._open_log)
         menu.addAction("Help", lambda: self._local_notice(HELP))
@@ -133,13 +133,19 @@ class MainWindow(QMainWindow):
 
         # The notice bar, for approvals and other decisions
         self.notice_bar = QFrame(objectName="notice")
-        notice_layout = QHBoxLayout(self.notice_bar)
-        notice_layout.setContentsMargins(8, 4, 8, 4)
+        # The text above its buttons: a button can be wide ("Restart tools and clear"), and beside a long text it
+        # would squeeze it
+        notice_layout = QVBoxLayout(self.notice_bar)
+        notice_layout.setContentsMargins(8, 6, 8, 6)
+        notice_layout.setSpacing(6)
         self.notice_label = QLabel("")
         self.notice_label.setWordWrap(True)
-        notice_layout.addWidget(self.notice_label, 1)
+        notice_layout.addWidget(self.notice_label)
         self.notice_buttons = QHBoxLayout()
-        notice_layout.addLayout(self.notice_buttons)
+        button_row = QHBoxLayout()
+        button_row.addLayout(self.notice_buttons)
+        button_row.addStretch(1)
+        notice_layout.addLayout(button_row)
         self.notice_bar.hide()
 
         # The prompt
@@ -165,9 +171,12 @@ class MainWindow(QMainWindow):
         bottom = QFrame(objectName="bar")
         bottom_row = QHBoxLayout(bottom)
         bottom_row.setContentsMargins(8, 4, 8, 4)
-        bottom_row.addWidget(self.usage_label)
-        bottom_row.addStretch(1)
+        # "Clear" in the other corner from "Send", so that it is not pressed by mistake instead of it
         bottom_row.addWidget(_button("Clear", self._clear, tip="Start a new conversation (/clear)"))
+        bottom_row.addWidget(_button("Help", lambda: self._local_notice(HELP), tip="Show the commands and keys (/help)"))
+        bottom_row.addStretch(1)
+        bottom_row.addWidget(self.usage_label)
+        bottom_row.addSpacing(24)
         self.send_button = _button("Send", self._send_clicked, "primary")
         bottom_row.addWidget(self.send_button)
 
@@ -410,7 +419,7 @@ class MainWindow(QMainWindow):
                 session.notice(error or f"The context size is {format_number(session.num_ctx)} tokens for this session. "
                                         "Ollama reloads the model with it on the next request. Ask again.")
             self.runner.call(larger)
-        elif action == "Open project…":
+        elif action == "Open project":
             self._open_project()
         elif action == REOPEN and self._reopen_offer:
             self._reopen(self._reopen_offer)
@@ -465,7 +474,7 @@ class MainWindow(QMainWindow):
             # No session exists outside a set-up project, so nothing can reach the model
             if self._project():
                 return "This folder is not set up as a project, so the model is not prompted here. Set it up with /setup."
-            return 'Open a project first: "Open project…" in the ≡ menu, or /project.'
+            return 'Open a project first: "Open project" in the ≡ menu, or /project.'
         if self._busy():
             return 'The model is running. Stop it with Esc or the "Stop" button to send this, or wait until it has finished.'
         if self.notice_bar.isVisible() and self._decision is None:

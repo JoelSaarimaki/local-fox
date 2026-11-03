@@ -144,6 +144,19 @@ def _tools_server(folder: str) -> dict:
     servers = json.loads((files(TOOLS_MODULE) / "templates" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     return _in_folder(next(iter(servers.values())), folder)
 
+def _with_instructions(config: dict, folder: str) -> dict:
+    """
+    Adds instructions_file to the tools config, after read_only_files: Local Fox gives that file to the model at the
+    start of every conversation, so the config says which file it is. Relative to project_dir, as the other paths.
+    """
+    result = {}
+    for key, value in config.items():
+        result[key] = value
+        if key == "read_only_files":
+            result["instructions_file"] = f"{folder}/{INSTRUCTIONS_NAME}"
+    result.setdefault("instructions_file", f"{folder}/{INSTRUCTIONS_NAME}")
+    return result
+
 def _template_files(folder: str) -> dict[str, bytes]:
     """
     Returns the files of a set-up project, by their path in it: the tools' templates moved into the project's
@@ -158,7 +171,7 @@ def _template_files(folder: str) -> dict[str, bytes]:
     instructions = instructions_template().replace(f"{PROJECT_FOLDER}/", f"{folder}/")
     return {
         ".mcp.json": dump({"mcpServers": {"dev": _tools_server(folder)}}),
-        f"{folder}/{CONFIG_NAME}": dump(_in_folder(load("tools-config.json"), folder)),
+        f"{folder}/{CONFIG_NAME}": dump(_with_instructions(_in_folder(load("tools-config.json"), folder), folder)),
         f"{folder}/commands.json": (templates / "commands.json").read_bytes(),
         f"{folder}/{INSTRUCTIONS_NAME}": instructions.encode("utf-8"),
         f"{folder}/.gitignore": gitignore.encode("utf-8"),

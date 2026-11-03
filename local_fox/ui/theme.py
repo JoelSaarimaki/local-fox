@@ -56,7 +56,10 @@ def stylesheet(font_size: int) -> str:
     QTabBar::tab {{ background-color: {PANEL}; color: {DIM}; border: 1px solid {BORDER}; padding: 3px 12px; }}
     QTabBar::tab:selected {{ color: {ACCENT}; border-bottom-color: {ACCENT}; }}
     QMenu {{ background-color: {PANEL}; border: 1px solid {BORDER}; }}
+    QMenu::item {{ padding: 4px 32px 4px 14px; }}
     QMenu::item:selected {{ background-color: #2a2a2a; color: {ACCENT}; }}
+    QMenu::item:disabled {{ color: {DARK}; }}
+    QToolButton::menu-indicator {{ image: none; width: 0px; }}
     QSplitter::handle {{ background-color: {BORDER}; }}
     QScrollBar:vertical {{ background: {BG}; width: 10px; }}
     QScrollBar::handle:vertical {{ background: #333333; min-height: 20px; }}

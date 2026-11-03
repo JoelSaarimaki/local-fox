@@ -171,7 +171,7 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 ## Conventions
 
 - **In texts shown to the user, put button, menu and command names in quotation marks**: 'choose "Create
-  .local-fox"', 'the "Stop" button', '"Open project…" in the ≡ menu'. Without them the sentences are hard to read.
+  .local-fox"', 'the "Stop" button', '"Open project" in the ≡ menu'. Without them the sentences are hard to read.
   Don't mention `.ollmcp-tools` or ollmcp-tools in introductions: users are not assumed to have them.
 - Follow the style of ollmcp-generic-tools: a docstring on every module and function, written as plain sentences
   saying what it does and why; comments for the reasons that are not obvious.

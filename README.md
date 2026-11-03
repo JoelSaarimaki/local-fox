@@ -29,7 +29,7 @@ Local Fox starts by asking for the project, before the window opens:
 - **Closing either dialog (X, Esc, Quit) quits Local Fox** before anything else starts.
 - A folder given as an argument (`LocalFox.exe C:\...\project`) opens at once if it is a project, otherwise it
   starts with the setup question for it.
-- **Open project…** in the ≡ menu (and `/project`) uses the same dialogs later; closing them then keeps the
+- **Open project** in the ≡ menu (and `/project`) uses the same dialogs later; closing them then keeps the
   open project.
 
 ### The bundled tools
@@ -38,7 +38,7 @@ Local Fox starts by asking for the project, before the window opens:
   the tools config (or the `.ollmcp-tools` folder of the tools' own init). A `.mcp.json` alone does not count.
   The window only ever opens a project, and the command line refuses to start in any other folder.
 - **Setting up is always deliberate**: only from the setup question (above), or `--setup` on the command line.
-  `/setup` (**Set up project…** in the ≡ menu) creates an open project's missing files, after confirming them.
+  `/setup` (**Set up project** in the ≡ menu) creates an open project's missing files, after confirming them.
   Nothing is created before you confirm. A drive root (`C:\`, `D:\`), the home
   folder and the folder of all homes, the application data folders, and system folders (Windows, Program
   Files, `/usr`) are never set up. Setting up creates `.mcp.json` and the project's **`.local-fox` folder** and
@@ -74,8 +74,9 @@ Local Fox starts by asking for the project, before the window opens:
 
 - **Top bar**: the version, the model (click to switch), the context size (click to change it for the session),
   and where the model runs (`ollama ps`). **Export** and the ≡ menu with the other commands are on the right.
-- **Bottom bar**: how much of the context the conversation uses, and **Clear** and **Send** (**Stop** while the
-  model runs) on the right. The filemap reaches down to it; the prompt is as wide as the feed above it.
+- **Bottom bar**: **Clear** and **Help** on the left, and on the right how much of the context the conversation
+  uses and **Send** (**Stop** while the model runs), far apart so that one is not pressed for the other. The
+  filemap reaches down to it; the prompt is as wide as the feed above it.
 - **Filemap** on the left: the project folder. A click on a folder opens or closes it; right-click a file or
   folder for **Add path to prompt** (relative to the project folder, as the tools take paths) and **Copy path**.
   Forbidden files are darker, read-only files are marked `ro`, ignored folders are dimmed, and the files the AI
@@ -108,7 +109,7 @@ Commands: `/clear`, `/export`, `/instructions`, `/model [name]`, `/context [size
 Every setting is in `config.json`, in `%APPDATA%\LocalFox` (or where `LOCAL_FOX_CONFIG` points); `/config`
 opens its folder, and a clear reads it again.
 
-**The settings view** (`/settings`, or **Settings…** in the ≡ menu) shows the same file as a form, with what each
+**The settings view** (`/settings`, or **Settings** in the ≡ menu) shows the same file as a form, with what each
 setting does. **Save** writes it: the model and context size apply at once, the others from the next clear.
 **Save and clear** applies them all at once. Its **Project tools** tab shows the open project's tools config
 (`.local-fox/tools-config.json`) the same way; settings it does not know are kept, and a saved change asks
@@ -160,9 +161,11 @@ not written, only their number.
 
 ## How a session goes to the model
 
-- **System message**: the project's `.local-fox/instructions.md` and the filemap, read at the start of every
+- **System message**: the project instructions and the filemap, read at the start of every
   session, also after a clear, and nothing else: Local Fox has no instructions of its own besides the template
-  the setup copies into the project. Both are shown in the feed as collapsed entries. **Both are read again
+  the setup copies into the project. The instructions are the file the tools config names in `instructions_file`
+  (`.local-fox/instructions.md` after setup; `instructions.md` next to the config if a config has no such
+  setting); the feed's entry shows which file it is. Both are shown in the feed as collapsed entries. **Both are read again
   before the first prompt** of a conversation, so files added (or instructions edited) while the window was open
   are in it; their entries then say so. After the first prompt they stay as the model got them (the model sees
   later changes with its tools); `/instructions` reads the instructions again when you want.

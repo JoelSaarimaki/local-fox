@@ -286,7 +286,7 @@ class Session:
         if instructions != self._instructions:
             self._instructions = instructions
             entry = next((e for e in self.entries if e.kind == c.INSTRUCTIONS), None)
-            title = f"Project instructions, read again before the first prompt ({format_number(estimate_tokens(instructions))} tokens)"
+            title = f"Project instructions, read again before the first prompt ({self._shown(path)}, {format_number(estimate_tokens(instructions))} tokens)"
             if entry:
                 entry.text, entry.title = instructions, title
                 self._update(entry)
@@ -333,7 +333,16 @@ class Session:
                         "The session runs without them.")
             return
         label = "Project instructions reloaded" if reloaded else "Project instructions"
-        self.add(Entry(c.INSTRUCTIONS, text=self._instructions, title=f"{label} ({format_number(estimate_tokens(self._instructions))} tokens)"))
+        self.add(Entry(c.INSTRUCTIONS, text=self._instructions, title=f"{label} ({self._shown(path)}, {format_number(estimate_tokens(self._instructions))} tokens)"))
+
+    def _shown(self, path: Path) -> str:
+        """
+        Returns a path as the feed shows it: relative to the project folder, as the tools take paths.
+        """
+        try:
+            return path.resolve().relative_to(self.project).as_posix()
+        except ValueError:
+            return path.as_posix()
 
     def _set_system_message(self) -> None:
         content = "\n\n".join(part for part in (self._instructions, self._filemap) if part)

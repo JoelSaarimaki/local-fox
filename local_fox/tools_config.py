@@ -22,6 +22,8 @@ SETTINGS = {
     "forbidden_paths": ("paths", "Folders and files the tools never access, one per line."),
     "allowed_paths": ("paths", "Folders and files inside forbidden folders that the tools may use again, one per line."),
     "read_only_files": ("paths", "Files the AI can read anywhere but never change, move or delete, one per line."),
+    "instructions_file": ("str?", "The project instructions, which Local Fox gives the model at the start of every conversation. "
+                                  "Keep it in read_only_files. Empty: instructions.md next to this config."),
     "max_output_chars": ("int?", "The largest tool response in characters (about 4 per token). Empty: 40 000; at least 2 000."),
     "gitignore_path": ("str?", "The .gitignore used by the outline and search tools. Empty: .gitignore in the project folder."),
     "command_registry": ("str?", "The command registry of the commands toolset; always protected."),

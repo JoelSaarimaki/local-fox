@@ -1,6 +1,6 @@
 """
 Choosing the project: the start dialog with the recent projects and Choose folder, and the setup question for a
-folder that is not a project yet. Local Fox starts with them, before the window, and Open project… uses them too.
+folder that is not a project yet. Local Fox starts with them, before the window, and "Open project" uses them too.
 
 Opening is always deliberate: nothing is selected at first, Enter does nothing, and a project opens only with
 Open or a double click. A folder that is not a project gets the setup question, which lists what setting it up
