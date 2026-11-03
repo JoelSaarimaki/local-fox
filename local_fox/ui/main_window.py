@@ -571,6 +571,8 @@ class MainWindow(QMainWindow):
 
     def _settings_saved(self, settings: dict, clear: bool, tools_changed: bool) -> None:
         self.filemap.full_paths = settings.get("prompt_full_paths", False)
+        if tools_changed:
+            self._wrote_tools_config()
         if clear and self.session:
             self._clear(settings, restart_tools=tools_changed)
             return
@@ -604,10 +606,18 @@ class MainWindow(QMainWindow):
         """
         session = self.session
         if session:
-            self._config_notified = session.read_tools_config()  # So that the watcher does not tell it again
+            self._wrote_tools_config()
             self.runner.call(lambda: session.notice(f"{text} Restarting them starts a new conversation.", [RESTART_TOOLS]))
         else:
             self._local_notice(text)
+
+    def _wrote_tools_config(self) -> None:
+        """
+        Local Fox itself just wrote the tools config (the settings view, the filemap's menu): the watcher must not
+        report the change as made outside Local Fox. Called right after the write, before the watcher's signal.
+        """
+        if self.session:
+            self._config_notified = self.session.read_tools_config()
 
     def _watch_tools_config(self) -> None:
         """

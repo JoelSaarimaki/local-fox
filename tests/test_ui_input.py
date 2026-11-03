@@ -79,3 +79,28 @@ def test_no_queue_while_the_model_runs(app):
     finally:
         window.session = None
         window.close()
+
+def test_own_changes_to_the_tools_config_are_not_reported_as_outside(app, tmp_path):
+    from types import SimpleNamespace
+    from local_fox.ui.main_window import MainWindow
+    (tmp_path / ".local-fox").mkdir()
+    config_file = tmp_path / ".local-fox" / "tools-config.json"
+    config_file.write_text('{"project_dir": ".."}', encoding="utf-8")
+    window = MainWindow(dict(config.DEFAULTS))
+    reported, cleared = [], []
+    window._tools_config_changed = reported.append
+    window._clear = lambda settings=None, restart_tools=False: cleared.append(restart_tools)
+    try:
+        window.session = SimpleNamespace(project=tmp_path, servers=object(), rules=None, running=False,
+                                         tools_config_text='{"project_dir": ".."}',
+                                         read_tools_config=lambda: config_file.read_text(encoding="utf-8"))
+        config_file.write_text('{"project_dir": "..", "max_output_chars": 30000}', encoding="utf-8")  # "Save and clear"
+        window._settings_saved(dict(config.DEFAULTS), True, True)
+        window._tools_config_touched()  # The watcher's signal for that write
+        assert cleared == [True] and reported == []
+        config_file.write_text('{"project_dir": "..", "max_output_chars": 20000}', encoding="utf-8")  # Then by hand
+        window._tools_config_touched()
+        assert len(reported) == 1 and "outside Local Fox" in reported[0]
+    finally:
+        window.session = None
+        window.close()
