@@ -333,3 +333,13 @@ def test_a_stopped_tools_server_is_reported(tmp_path):
     assert "the tools' server stopped" in tool_messages(session)[0]
     assert any(e.kind == c.ERROR and "stopped, so the tools cannot run" in e.text for e in session.entries)
     assert any(e.kind == c.NOTICE and e.actions == [RESTART_TOOLS] for e in session.entries)
+
+def test_the_model_is_told_where_its_instructions_are_from(tmp_path):
+    session, _, _ = make_session(tmp_path, [[chunk("ok", done=True)]])
+    note = "These are the project instructions, from `.local-fox/instructions.md`. You already have them"
+    system = session.messages[0]["content"]
+    assert system.startswith(note) and "Be careful." in system
+    entry = next(e for e in session.entries if e.kind == c.INSTRUCTIONS)
+    assert entry.text.startswith(note) and entry.text in system  # The feed shows what the model gets
+    asyncio.run(session.send("Hi"))  # Unchanged file: not read again before the first prompt
+    assert "read again" not in next(e for e in session.entries if e.kind == c.INSTRUCTIONS).title

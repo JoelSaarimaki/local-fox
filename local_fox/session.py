@@ -282,7 +282,7 @@ class Session:
         changed = []
         path = instructions_path(self.project)
         try:
-            instructions = path.read_text(encoding="utf-8").strip()
+            instructions = self._with_source(path, path.read_text(encoding="utf-8").strip())
         except OSError:
             instructions = ""
         if instructions != self._instructions:
@@ -325,10 +325,21 @@ class Session:
             self.notice(self.log.error)
             self.log.error = None
 
+    def _with_source(self, path: Path, text: str) -> str:
+        """
+        Returns the instructions as the model gets them: after a line that says which file they are and that the model
+        already has them. Without it, a model asked to read the instructions (e.g. by a task that names the file) does
+        not know it has them, and looks for the file. Empty instructions stay empty.
+        """
+        if not text:
+            return ""
+        return (f"These are the project instructions, from `{self._shown(path)}`. You already have them: there is no need "
+                f"to read that file.\n\n{text}")
+
     def _read_instructions(self, reloaded: bool) -> None:
         path = instructions_path(self.project)
         try:
-            self._instructions = path.read_text(encoding="utf-8").strip()
+            self._instructions = self._with_source(path, path.read_text(encoding="utf-8").strip())
         except OSError:
             self._instructions = ""
             self.notice(f"No project instructions: {path.as_posix()} was not found. "

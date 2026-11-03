@@ -170,7 +170,9 @@ not written, only their number.
   (`.local-fox/instructions.md` after setup; `instructions.md` next to the config if a config has no such
   setting); the feed's entry shows which file it is. Both are shown in the feed as collapsed entries. **Both are read again
   before the first prompt** of a conversation, so files added (or instructions edited) while the window was open
-  are in it; their entries then say so. After the first prompt they stay as the model got them (the model sees
+  are in it; their entries then say so. The instructions start with a line naming their file and saying the model
+  already has them, so a task that asks to read them does not send it looking. After the first prompt they stay as
+  the model got them (the model sees
   later changes with its tools); `/instructions` reads the instructions again when you want.
 - **The tools config edited by hand**: the tools read `.local-fox/tools-config.json` only when they start. When
   the file changes outside Local Fox, the feed says so and offers **Restart tools and clear**; until then the
