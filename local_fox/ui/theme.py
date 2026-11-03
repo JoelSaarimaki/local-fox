@@ -29,6 +29,9 @@ def stylesheet(font_size: int) -> str:
     QTreeView, QPlainTextEdit, QTextBrowser {{ background-color: {BG}; border: 1px solid {BORDER}; selection-background-color: #3a2a1a; }}
     QTreeView {{ background-color: {PANEL}; }}
     QTreeView::item:hover {{ background-color: #262626; }}
+    /* A selected file keeps light text, also under the mouse (Qt's highlighted text color would be dark there) */
+    QTreeView {{ selection-color: {TEXT}; }}
+    QTreeView::item:selected, QTreeView::item:selected:hover {{ background-color: #3a2a1a; color: {TEXT}; }}
     QPlainTextEdit {{ background-color: {PANEL}; padding: 4px; }}
     QPushButton, QToolButton {{ background-color: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; padding: 2px 10px; }}
     QPushButton:hover, QToolButton:hover {{ border-color: {ACCENT}; color: {ACCENT}; }}

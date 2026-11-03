@@ -83,7 +83,8 @@ Local Fox starts by asking for the project, before the window opens:
   folder for **Add path to prompt** (relative to the project folder, as the tools take paths) and **Copy path**.
   Forbidden files are darker, read-only files are marked `ro`, ignored folders are dimmed, and the files the AI
   changed in the session are orange.
-- **Allow, Read-only, Forbid** in the filemap's menu add the path to `allowed_paths` (inside a forbidden folder),
+- **Add path to allowed**, **Add path to read-only** and **Add path to forbidden** in the filemap's menu add the
+  path to `allowed_paths` (inside a forbidden folder),
   `read_only_files` or `forbidden_paths` of the project's tools config, or remove it from there. Only you make
   these changes, never the model. The feed says what changed and offers **Restart tools and clear**: the tools
   read their config when they start, and the model gets the tools and the filemap again in a new conversation.
@@ -144,7 +145,7 @@ Local Fox keeps one log of the current run: `logs/session.jsonl` next to `config
 written as it happens, with every conversation of the run (each clear starts a new one with a `conversation`
 line). The output of the MCP servers (their stderr) is in `logs/server-<key>.log`. **Every start of Local Fox
 empties them**, so after something goes wrong the log is right there and holds only that run; save a copy before
-starting again if you need it. `/log` (or **Open log** in the ≡ menu) opens the folder.
+starting again if you need it. `/log` (or **Open config folder** in the ≡ menu) opens the folder.
 
 Unlike the export, the log is written without asking and holds what the feed does not show:
 

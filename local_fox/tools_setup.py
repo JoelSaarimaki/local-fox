@@ -298,7 +298,7 @@ def set_up(project: Path) -> str:
         backups.mkdir(parents=True, exist_ok=True)
         dir_line = (f"{folder}/{CONFIG_NAME}: 'project_dir' is \"{config['project_dir']}\", relative to the config's own folder: "
                     f"{project_dir.as_posix()}. The tools can access this folder, and every other path in the config is relative "
-                    f"to it. Add the folders and files the AI must never access to 'forbidden_paths' (or use \"Forbid\" in the filemap's menu).")
+                    f"to it. Add the folders and files the AI must never access to 'forbidden_paths' (or use \"Add path to forbidden\" in the filemap's menu).")
     except (OSError, ValueError, KeyError, TypeError) as error:
         dir_line = f"{folder}/{CONFIG_NAME} cannot be read ({error}). Fix it before the tools can start."
 

@@ -1,5 +1,5 @@
 """
-Tests of the user's changes to the project's tools config: the filemap's Allow, Read-only and Forbid, the
+Tests of the user's changes to the project's tools config: the filemap's "Add path to …" actions, the
 checks before writing, and the settings view's form, which keeps the settings it does not know.
 """
 import json
@@ -25,11 +25,11 @@ def saved(project):
 
 def test_actions_follow_the_paths_state(tmp_path):
     project = make_project(tmp_path)
-    labels = lambda path: [label.split("  ")[0] for label, _, _ in tools_config.path_actions(project, path)]
-    assert labels(project / "src" / "app.py") == ["Read-only", "Forbid"]
-    assert labels(project / "src") == ["Forbid"]
-    assert labels(project / "secrets" / "key.txt") == ["Allow", "Read-only", "Forbid"]
-    assert labels(project / "secrets") == ["Remove from forbidden paths"]
+    labels = lambda path: [label for label, _, _ in tools_config.path_actions(project, path)]
+    assert labels(project / "src" / "app.py") == ["Add path to read-only", "Add path to forbidden"]
+    assert labels(project / "src") == ["Add path to forbidden"]
+    assert labels(project / "secrets" / "key.txt") == ["Add path to allowed", "Add path to read-only", "Add path to forbidden"]
+    assert labels(project / "secrets") == ["Remove path from forbidden"]
 
 def test_change_adds_and_removes_relative_paths(tmp_path):
     project = make_project(tmp_path)

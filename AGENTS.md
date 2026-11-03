@@ -80,7 +80,7 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   message, instructions, filemap and tools as they are now (`Session.reopen`). The folder is forbidden to the
   tools and has its own `.gitignore` (`*`). Adding a field to `Entry` is compatible: unknown fields are dropped on load.
 - The tools' own config (`.local-fox/tools-config.json`) is changed only by the user, never by the model:
-  through the settings view's Project tools tab and the filemap's Allow / Read-only / Forbid (`tools_config.py`).
+  through the settings view's Project tools tab and the filemap's "Add path to …" actions (`tools_config.py`).
   The tools read it when they start, so a change applies when they restart, which starts a new conversation.
 - **One log per run** (`session_log.py`): `logs/session.jsonl` next to `config.json`, appended through the run,
   plus the servers' stderr in `logs/server-<key>.log`. Every start of the application (the window, the CLI,

@@ -1,6 +1,7 @@
 """
 The project's tools config (.local-fox/tools-config.json, or where .mcp.json's MCP_TOOLS_CONFIG points), as
-the user changes it in Local Fox: in the settings view, and with Allow, Read-only and Forbid in the filemap's menu.
+the user changes it in Local Fox: in the settings view, and with "Add path to allowed", "Add path to read-only" and
+"Add path to forbidden" in the filemap's menu.
 
 Only the user changes it, never the model: the tools protect the file from their own tools, so that the AI
 cannot lift its own limits, and Local Fox writes it only for the user's actions. The tools read it when they
@@ -104,9 +105,9 @@ def path_actions(project: Path, path: Path) -> list[tuple[str, str, bool]]:
     if not target.is_relative_to(rules.base) or target == rules.base:
         return []
     actions = []
-    labels = {"allowed_paths": ("Allow", "Remove from allowed paths"),
-              "read_only_files": ("Read-only", "Remove from read-only files"),
-              "forbidden_paths": ("Forbid", "Remove from forbidden paths")}
+    labels = {"allowed_paths": ("Add path to allowed", "Remove path from allowed"),
+              "read_only_files": ("Add path to read-only", "Remove path from read-only"),
+              "forbidden_paths": ("Add path to forbidden", "Remove path from forbidden")}
     for key in PATH_LISTS:
         if key == "read_only_files" and target.is_dir():
             continue
@@ -116,7 +117,7 @@ def path_actions(project: Path, path: Path) -> list[tuple[str, str, bool]]:
             # instead, as the tools keep a path forbidden when it is both forbidden and allowed
             continue
         add_label, remove_label = labels[key]
-        actions.append((remove_label if listed else f"{add_label}  (add to {key})", key, not listed))
+        actions.append((remove_label if listed else add_label, key, not listed))
     return actions
 
 def change_path(project: Path, key: str, path: Path, add: bool) -> str:

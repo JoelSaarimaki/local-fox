@@ -289,7 +289,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.error)
 
         buttons = QHBoxLayout()
-        folder = QPushButton("Open folder")
+        folder = QPushButton("Open config folder")
         folder.clicked.connect(self.open_folder.emit)
         buttons.addWidget(folder)
         buttons.addStretch(1)
