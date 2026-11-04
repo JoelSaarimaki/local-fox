@@ -182,3 +182,10 @@ def test_closing_an_entry_leaves_no_list_formatting_behind(app):
     entry.collapsed = True
     feed.render(follow=False)
     assert blocks() == closed  # Closed again: the same as before it was opened
+
+def test_new_entries_replace_the_feed(app):
+    # A new conversation (Clear, Save and clear, a reopened one) gives the feed a new list: only it is shown
+    feed = _feed(app, [c.Entry(c.INSTRUCTIONS, title="Project instructions", text="old"), c.Entry(c.USER, text="Old question")])
+    feed.set_entries([c.Entry(c.INSTRUCTIONS, title="Project instructions", text="new")])
+    app.processEvents()
+    assert feed.toPlainText().count("Project instructions") == 1 and "Old question" not in feed.toPlainText()

@@ -46,8 +46,11 @@ class Feed(QTextBrowser):
     def set_entries(self, entries: list[Entry]) -> None:
         self.entries = entries
         self._cache.clear()
-        self._frames = []
-        self.render()
+        # The document is written again: forgetting only the frames would leave the old conversation's text in it,
+        # and the new entries would be added after it (Save and clear showed the start entries again and again)
+        self._render_all(list(entries))
+        bar = self.verticalScrollBar()
+        bar.setValue(bar.maximum())
 
     def schedule(self) -> None:
         """
