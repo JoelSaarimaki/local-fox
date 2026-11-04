@@ -18,7 +18,7 @@ from . import conversation as c
 from . import saved_conversations as saved
 from . import tools_setup
 from .config import data_dir
-from .conversation import Entry, estimate_tokens, format_number, main_argument
+from .conversation import Entry, call_text, estimate_tokens, format_number, main_argument, superseded
 from .filemap import Rules, instructions_path, model_filemap, tools_config_path
 from .mcp_servers import Servers
 from .ollama_errors import explain, explain_connection
@@ -596,10 +596,13 @@ class Session:
     def _fit_context(self) -> bool:
         """
         Makes the next request fit in the context, leaving room for the reply, before it is sent: if it would not
-        fit, the responses of the oldest tool calls are replaced with a short note, oldest first, until it does. The
-        responses of the latest step stay, as do all messages of the user and the model, so the model keeps its task
-        and can call a tool again for what it needs. The replaced calls are marked in the feed. Returns False if the
+        fit, the responses of earlier tool calls are replaced with a short note until it does. Out-of-date reads go
+        first (a file read again or changed later, see `superseded`), then the oldest responses. The note gives the
+        exact call that gets the content back. The responses of the latest step stay, as do all messages of the user
+        and the model, so the model keeps its task. The replaced calls are marked in the feed. Returns False if the
         request does not fit even then. Without this, Ollama would drop the oldest messages, the user's request first.
+        The order is decided from the calls alone, not by asking the model what it still needs: the small models
+        judge that poorly, and a tool for it would add to the definitions sent with every request.
         """
         budget = self.num_ctx - max(2048, self.num_ctx // 8)
         if self._estimate() <= budget:
@@ -607,20 +610,27 @@ class Session:
         tool_indexes = [i for i, m in enumerate(self.messages) if m.get("role") == "tool"]
         last_reply = max((i for i, m in enumerate(self.messages) if m.get("role") == "assistant"), default=-1)
         tool_entries = [e for e in self.entries if e.kind == c.TOOL]  # One response message per tool call, in order
+        matched = len(tool_entries) == len(tool_indexes)
+        stale = superseded(tool_entries) if matched else set()
+        # The responses before the latest step, out-of-date reads first, then the rest; each group oldest first
+        candidates = [k for k, i in enumerate(tool_indexes) if i <= last_reply]
+        candidates.sort(key=lambda k: (k not in stale, k))
         removed, tokens = [], 0
-        for k, i in enumerate(tool_indexes):
-            if i > last_reply:
-                break  # The responses to the latest step
+        for k in candidates:
+            i = tool_indexes[k]
             message = self.messages[i]
-            entry = tool_entries[k] if len(tool_entries) == len(tool_indexes) else None
+            entry = tool_entries[k] if matched else None
             if (entry and entry.removed) or len(message.get("content", "")) < 400:
                 continue
             size = int(len(message["content"]) * self._tokens_per_char)
             name = entry.tool if entry else message.get("tool_name", "tool")
             target = main_argument(entry.args) if entry else ""
+            again = call_text(name, entry.args) if entry else ""
+            why = (" A later call read or changed the same file, so this content was out of date." if k in stale else "")
+            how = f" To see it again, call {again}." if again else " Call the tool again if you need it."
             self.messages[i] = {k2: v for k2, v in message.items() if k2 != "images"} | {"content": (
-                f"[Removed by Local Fox to make room in the context: the response of {name}{' ' + target if target else ''}, "
-                f"about {format_number(size)} tokens. Call the tool again if you need it.]")}
+                f"[Removed by Local Fox to make room in the context: the response of {again or (name + (' ' + target if target else ''))}, "
+                f"about {format_number(size)} tokens.{why}{how}]")}
             if entry:
                 entry.removed = True
                 self._update(entry)

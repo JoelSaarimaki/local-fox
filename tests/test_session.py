@@ -379,13 +379,45 @@ def test_old_tool_responses_make_room_instead_of_the_request_being_dropped(tmp_p
     asyncio.run(session.send("Read the three files"))
     assert session.messages[1] == {"role": "user", "content": "Read the three files"}  # The request stays
     tool_texts = tool_messages(session)
-    assert tool_texts[0].startswith("[Removed by Local Fox to make room in the context: the response of read_file_with_metadata a.py")
+    assert tool_texts[0].startswith("[Removed by Local Fox to make room in the context: the response of read_file_with_metadata(path='a.py')")
+    assert "To see it again, call read_file_with_metadata(path='a.py')." in tool_texts[0]  # The exact call to repeat
     assert tool_texts[-1].startswith("c.py: xxx")  # The latest step's response stays
     calls = [e for e in session.entries if e.kind == c.TOOL]
     assert calls[0].removed and not calls[-1].removed
     assert any(e.kind == c.NOTICE and "To fit the context" in e.text for e in session.entries)
     assert session.entries[-1].kind == c.ASSISTANT and session.entries[-1].text == "Done."
     assert not any(e.kind == c.ERROR for e in session.entries)
+
+def test_out_of_date_reads_make_room_first(tmp_path):
+    read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], num_ctx=5800, auto_approve_tools=["read_file_with_metadata"])
+    session.client = CountingClient([read("b.py"), read("a.py"), read("a.py"), read("c.py"), [chunk("Done.", done=True)]])
+    big_reads(session, mcp)
+    asyncio.run(session.send("Read the files"))
+    calls = [e for e in session.entries if e.kind == c.TOOL]
+    assert calls[1].removed  # The first read of a.py, which the second read made out of date, went first
+    assert not calls[0].removed  # b.py, although older, is still needed: there was room after the stale read went
+    assert "A later call read or changed the same file" in tool_messages(session)[1]
+
+def test_superseded_reads():
+    def tool(name, args, status=c.OK):
+        return c.Entry(c.TOOL, tool=name, resolved=name, args=args, status=status)
+    calls = [
+        tool("read_file_with_metadata", {"path": "a.py"}),                   # 0: read again by 2
+        tool("read_file_with_metadata", {"path": "a.py", "section": "f"}),   # 1: changed by 4
+        tool("read_file_with_metadata", {"path": "./a.py"}),                 # 2: changed by 4
+        tool("get_outline", {"path": "b.py"}),                               # 3: the edit of b.py failed: still current
+        tool("edit_file", {"path": "a.py", "old_text": "x", "new_text": "y"}),
+        tool("edit_file", {"path": "b.py"}, status=c.FAILED),
+        tool("read_file_with_metadata", {"path": "c.py"}),                   # 6: the latest read of c.py
+    ]
+    assert c.superseded(calls) == {0, 1, 2}
+
+def test_call_text():
+    assert c.call_text("read_file_with_metadata", {"path": "a.py", "section": "Cart.total"}) == \
+        "read_file_with_metadata(path='a.py', section='Cart.total')"
+    assert c.call_text("write_file", {"path": "a.py", "content": "line\nline"}) == ""  # Not worth repeating
+    assert c.call_text("x", "{broken") == ""
 
 def test_a_cut_by_ollama_stops_the_turn(tmp_path):
     read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]

@@ -55,9 +55,12 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   a help text in `DESCRIPTIONS` (the settings view shows it; a test checks every setting has one), a check in
   `validate()` if it is not a plain bool/int/str, and a row in the README's settings table. A setting whose
   default is `null` also needs its kind in `KINDS` of `ui/settings_view.py`. Unknown keys are an error on load.
-- **Fitting the context** (`Session._fit_context`, `_counted`): before each request, the oldest tool responses are
+- **Fitting the context** (`Session._fit_context`, `_counted`): before each request, earlier tool responses are
   replaced with a note if the request would not fit (the user's and model's messages and the latest step's
-  responses never), marked in the feed (`Entry.removed`); if it still does not fit, it is not sent; and a drop in
+  responses never), out-of-date reads first (`conversation.superseded`: read again or changed later), then the
+  oldest; the note gives the exact call to repeat (`call_text`). They are marked in the feed (`Entry.removed`).
+  The order comes from the calls, never from the model: don't add a tool for the model to flag what it needs (it
+  costs definitions on every request, and the small models judge it poorly). If it still does not fit, it is not sent; and a drop in
   Ollama's prompt count without such a removal means Ollama cut the conversation, which stops the turn. This is the
   only place Local Fox changes what the model already had, and it is always shown in the feed. The k-th tool message
   answers the k-th tool entry, which is how a message finds its entry.

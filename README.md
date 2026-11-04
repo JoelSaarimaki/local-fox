@@ -212,9 +212,11 @@ Ollama does not refuse a longer request: it silently drops the oldest messages, 
 model goes on without knowing its task. Local Fox keeps that from happening:
 
 - **Before every request**, it estimates the request's size (calibrated with Ollama's own counts) and leaves room
-  for the reply. If the request would not fit, the responses of the oldest tool calls are replaced with a short
-  note ("Removed by Local Fox to make room in the context: the response of read_file_with_metadata src/app.py,
-  about 5 900 tokens. Call the tool again if you need it."), oldest first, until it fits. Your messages, the
+  for the reply. If the request would not fit, the responses of earlier tool calls are replaced with a short
+  note ("Removed by Local Fox to make room in the context: the response of
+  read_file_with_metadata(path='src/app.py'), about 5 900 tokens. To see it again, call
+  read_file_with_metadata(path='src/app.py').") until it fits. Out-of-date reads go first: a file the model read
+  again, or changed, later. Then the oldest responses. Your messages, the
   model's replies and the latest step's tool responses always stay, so the model keeps its task and can read a
   file again. The feed says so, and marks those tool calls "(response removed from the model's context)".
 - **If it still does not fit**, the request is not sent, and the feed offers **Clear**, **Export** and **Larger

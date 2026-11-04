@@ -61,6 +61,53 @@ def main_argument(args) -> str:
             return value
     return ""
 
+# The tools whose responses show a file as it was when they ran, and the tools that change a file. The tools' own
+# names: an entry's `resolved` name, whatever prefix the model used.
+READING_TOOLS = {"read_file_with_metadata", "read_image", "get_outline"}
+CHANGING_TOOLS = {"write_file", "edit_file", "move_file", "delete_file", "restore_file"}
+
+def _path(args) -> str:
+    """
+    Returns a tool call's path in one spelling (forward slashes, no leading ./), or "" if it has none.
+    """
+    if not isinstance(args, dict):
+        return ""
+    path = str(args.get("path") or args.get("source") or "").replace("\\", "/").rstrip("/")
+    while path.startswith("./"):
+        path = path[2:]
+    return path
+
+def superseded(tool_entries: list[Entry]) -> set[int]:
+    """
+    Returns the positions of the tool calls whose responses are out of date: a read of a file (or its outline) that
+    a later successful call read again with the same arguments, or that a later successful call changed. These are
+    the first to go when the context must make room, as the model has newer content or the file is no longer like
+    that. Deciding this from the calls needs no judgment from the model.
+    """
+    result = set()
+    for k, entry in enumerate(tool_entries):
+        name, path = entry.resolved or entry.tool, _path(entry.args)
+        if name not in READING_TOOLS or not path:
+            continue
+        for later in tool_entries[k + 1:]:
+            later_name = later.resolved or later.tool
+            if later.status != OK:
+                continue  # A failed call neither shows the file again nor changes it
+            if (later_name == name and later.args == entry.args) or (later_name in CHANGING_TOOLS and _path(later.args) == path):
+                result.add(k)
+                break
+    return result
+
+def call_text(name: str, args) -> str:
+    """
+    Returns a tool call as the model can repeat it, read_file_with_metadata(path='cart.py', section='Cart.total'),
+    for the note that replaces its response; "" if its arguments are not a dict or too long to repeat usefully.
+    """
+    if not isinstance(args, dict) or any(isinstance(value, str) and "\n" in value for value in args.values()):
+        return ""  # A call with file content in it is not one to repeat
+    text = f"{name}({', '.join(f'{key}={value!r}' for key, value in args.items())})"
+    return text if len(text) <= 200 else ""
+
 def format_number(n: int) -> str:
     """
     Formats a number with spaces between the thousands: 32 000.
