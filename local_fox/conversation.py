@@ -2,6 +2,7 @@
 The conversation as data: the entries of the feed. Each entry is something the user sees; what goes to the
 model is kept separately in Session.messages, and every part of it has an entry.
 """
+import re
 from dataclasses import dataclass, field
 from itertools import count
 
@@ -77,25 +78,52 @@ def _path(args) -> str:
         path = path[2:]
     return path
 
+# The header line of a read that shows the whole file: "- Lines: 1-19 of 19", not "(partial)", or an empty file
+_WHOLE_FILE = re.compile(r"^- Lines: (?:1-(\d+) of \1|0 \(empty file\))$", re.MULTILINE)
+
+def _whole_file(entry: Entry) -> bool:
+    """
+    Returns whether a read_file_with_metadata response shows the whole file. A read without line or section
+    arguments can still be partial: the tools read long files in parts.
+    """
+    return bool(_WHOLE_FILE.search(entry.response)) and "Output limited" not in entry.response
+
+def _lines(text: str) -> str:
+    """
+    Returns a text's lines without their indentation and without the empty ones, so that an edit's old text is
+    found in a read although the model changed its whitespace (which the edit tool tolerates).
+    """
+    return "\n".join(line.strip() for line in text.splitlines() if line.strip())
+
+def _out_of_date(entry: Entry, name: str, path: str, later: Entry) -> bool:
+    """
+    Returns whether a later successful call makes a read out of date:
+    - the same read again (the same file and part), or a read of the whole file, which contains every part;
+    - an edit of text that the read showed (an edit elsewhere in the file leaves the read's content right);
+    - any other change of the file, which may have replaced or removed all of it, and any change for an outline,
+      whose line spans shift.
+    """
+    later_name = later.resolved or later.tool
+    if later.status != OK or _path(later.args) != path:
+        return False  # A failed call neither shows the file again nor changes it
+    if later_name == name:
+        return later.args == entry.args or (name == "read_file_with_metadata" and _whole_file(later))
+    if later_name == "edit_file" and name == "read_file_with_metadata" and isinstance(later.args, dict):
+        old = _lines(str(later.args.get("old_text") or ""))
+        return bool(old) and old in _lines(entry.response)
+    return later_name in CHANGING_TOOLS
+
 def superseded(tool_entries: list[Entry]) -> set[int]:
     """
-    Returns the positions of the tool calls whose responses are out of date: a read of a file (or its outline) that
-    a later successful call read again with the same arguments, or that a later successful call changed. These are
-    the first to go when the context must make room, as the model has newer content or the file is no longer like
+    Returns the positions of the tool calls whose responses are out of date (see `_out_of_date`). These are the
+    first to go when the context must make room, as the model has newer content or the file is no longer like
     that. Deciding this from the calls needs no judgment from the model.
     """
     result = set()
     for k, entry in enumerate(tool_entries):
         name, path = entry.resolved or entry.tool, _path(entry.args)
-        if name not in READING_TOOLS or not path:
-            continue
-        for later in tool_entries[k + 1:]:
-            later_name = later.resolved or later.tool
-            if later.status != OK:
-                continue  # A failed call neither shows the file again nor changes it
-            if (later_name == name and later.args == entry.args) or (later_name in CHANGING_TOOLS and _path(later.args) == path):
-                result.add(k)
-                break
+        if name in READING_TOOLS and path and any(_out_of_date(entry, name, path, later) for later in tool_entries[k + 1:]):
+            result.add(k)
     return result
 
 def call_text(name: str, args) -> str:

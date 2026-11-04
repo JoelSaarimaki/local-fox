@@ -215,8 +215,9 @@ model goes on without knowing its task. Local Fox keeps that from happening:
   for the reply. If the request would not fit, the responses of earlier tool calls are replaced with a short
   note ("Removed by Local Fox to make room in the context: the response of
   read_file_with_metadata(path='src/app.py'), about 5 900 tokens. To see it again, call
-  read_file_with_metadata(path='src/app.py').") until it fits. Out-of-date reads go first: a file the model read
-  again, or changed, later. Then the oldest responses. Your messages, the
+  read_file_with_metadata(path='src/app.py').") until it fits. Out-of-date reads go first: a part of a file the
+  model read again later (or the whole file), text it then edited, or a file it rewrote, moved or deleted. An edit
+  elsewhere in the file leaves a read in place. Then the oldest responses go. Your messages, the
   model's replies and the latest step's tool responses always stay, so the model keeps its task and can read a
   file again. The feed says so, and marks those tool calls "(response removed from the model's context)".
 - **If it still does not fit**, the request is not sent, and the feed offers **Clear**, **Export** and **Larger

@@ -399,19 +399,45 @@ def test_out_of_date_reads_make_room_first(tmp_path):
     assert not calls[0].removed  # b.py, although older, is still needed: there was room after the stale read went
     assert "A later call read or changed the same file" in tool_messages(session)[1]
 
-def test_superseded_reads():
-    def tool(name, args, status=c.OK):
-        return c.Entry(c.TOOL, tool=name, resolved=name, args=args, status=status)
+def tool(name, args, response="", status=c.OK):
+    return c.Entry(c.TOOL, tool=name, resolved=name, args=args, response=response, status=status)
+
+def read_response(start, end, total, body, limited=False):
+    partial = " (partial)" if (start, end) != (1, total) else ""
+    return (f"- File: `x`\n- Lines: {start}-{end} of {total}{partial}\n"
+            + ("- Output limited: lines are shown, as one read is limited.\n" if limited else "") + f"\n```python\n{body}\n```")
+
+def test_an_edit_makes_out_of_date_only_the_reads_that_showed_its_text():
     calls = [
-        tool("read_file_with_metadata", {"path": "a.py"}),                   # 0: read again by 2
-        tool("read_file_with_metadata", {"path": "a.py", "section": "f"}),   # 1: changed by 4
-        tool("read_file_with_metadata", {"path": "./a.py"}),                 # 2: changed by 4
-        tool("get_outline", {"path": "b.py"}),                               # 3: the edit of b.py failed: still current
-        tool("edit_file", {"path": "a.py", "old_text": "x", "new_text": "y"}),
-        tool("edit_file", {"path": "b.py"}, status=c.FAILED),
-        tool("read_file_with_metadata", {"path": "c.py"}),                   # 6: the latest read of c.py
+        tool("read_file_with_metadata", {"path": "a.py", "section": "f"}, read_response(1, 3, 9, "def f():\n    return 1")),
+        tool("read_file_with_metadata", {"path": "a.py", "section": "g"}, read_response(5, 7, 9, "def g():\n    return 2")),
+        tool("get_outline", {"path": "b.py"}),
+        tool("edit_file", {"path": "./a.py", "old_text": "def f():\n  return 1", "new_text": "def f():\n    return 3"}),
+        tool("edit_file", {"path": "b.py", "old_text": "x"}, status=c.FAILED),
     ]
-    assert c.superseded(calls) == {0, 1, 2}
+    # f's read showed the edited text (with other indentation); g's read is still right; b.py's edit failed
+    assert c.superseded(calls) == {0}
+
+def test_other_changes_and_outlines():
+    calls = [
+        tool("read_file_with_metadata", {"path": "a.py", "section": "g"}, read_response(5, 7, 9, "def g(): pass")),
+        tool("get_outline", {"path": "a.py"}, "5-7 g()"),
+        tool("edit_file", {"path": "a.py", "old_text": "def f(): pass", "new_text": ""}),  # Line spans shift
+        tool("read_file_with_metadata", {"path": "c.py"}, read_response(1, 4, 4, "c")),
+        tool("write_file", {"path": "c.py", "content": "new"}),
+    ]
+    assert c.superseded(calls) == {1, 3}
+
+def test_reads_made_out_of_date_by_reads():
+    calls = [
+        tool("read_file_with_metadata", {"path": "a.py", "section": "f"}, read_response(1, 3, 9, "f")),
+        tool("read_file_with_metadata", {"path": "a.py", "section": "f"}, read_response(1, 3, 9, "f")),  # The same again
+        tool("read_file_with_metadata", {"path": "b.py", "section": "f"}, read_response(1, 3, 2000, "f")),
+        tool("read_file_with_metadata", {"path": "b.py"}, read_response(1, 1000, 2000, "...")),  # Long file: only a part
+        tool("read_file_with_metadata", {"path": "a.py", "section": "g"}, read_response(5, 7, 9, "g")),
+        tool("read_file_with_metadata", {"path": "a.py"}, read_response(1, 9, 9, "all")),  # The whole file
+    ]
+    assert c.superseded(calls) == {0, 1, 4}  # Not b.py's section: the later read did not show all of b.py
 
 def test_call_text():
     assert c.call_text("read_file_with_metadata", {"path": "a.py", "section": "Cart.total"}) == \

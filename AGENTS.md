@@ -57,7 +57,8 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   default is `null` also needs its kind in `KINDS` of `ui/settings_view.py`. Unknown keys are an error on load.
 - **Fitting the context** (`Session._fit_context`, `_counted`): before each request, earlier tool responses are
   replaced with a note if the request would not fit (the user's and model's messages and the latest step's
-  responses never), out-of-date reads first (`conversation.superseded`: read again or changed later), then the
+  responses never), out-of-date reads first (`conversation.superseded`: the same part read again, the whole file read later, an
+  edit of text the read showed, or any other change of the file), then the
   oldest; the note gives the exact call to repeat (`call_text`). They are marked in the feed (`Entry.removed`).
   The order comes from the calls, never from the model: don't add a tool for the model to flag what it needs (it
   costs definitions on every request, and the small models judge it poorly). If it still does not fit, it is not sent; and a drop in
