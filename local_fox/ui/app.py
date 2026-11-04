@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from .. import APP_NAME
 from .. import config as config_module
 from .. import session_log
+from ..shell_path import add_login_shell_path
 from . import theme
 from .logo import fox_icon
 from .main_window import MainWindow
@@ -28,8 +29,13 @@ def folder_argument(argv: list[str]) -> Path | None:
     return None
 
 def main() -> int:
+    add_login_shell_path()  # macOS: the PATH of the user's shell, for the servers and the commands they run
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    if sys.platform == "darwin":
+        # Qt's macOS style draws dropdowns, buttons and scrollbars partly its own way under the stylesheet; Fusion
+        # follows the stylesheet as the Windows style does, so the window looks the same on both
+        app.setStyle("Fusion")
     app.setWindowIcon(fox_icon())  # The dialogs, the window and the taskbar
     session_log.reset(config_module.data_dir() / "logs")  # Every start begins with an empty log
     config_error = None

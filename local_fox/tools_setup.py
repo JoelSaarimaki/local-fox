@@ -98,6 +98,10 @@ def refusal(project: Path) -> str | None:
         return f"{shown} is the root of a drive. Set up a project's own folder instead."
     home = Path.home().resolve()
     exact = {home: "your home folder", home.parent: "the folder of the users' home folders"}
+    if project.parent == Path("/Volumes"):
+        return f"{shown} is the root of a disk. Set up a project's own folder instead."
+    if os.name != "nt" and (project == home / "Library" or project.is_relative_to(home / "Library")):
+        return f"{shown} is in your Library folder, which macOS and its applications use. Set up a project's own folder instead."
     for name in ("APPDATA", "LOCALAPPDATA", "USERPROFILE"):
         if os.environ.get(name):
             exact[Path(os.environ[name]).resolve()] = f"a folder of the system ({name})"

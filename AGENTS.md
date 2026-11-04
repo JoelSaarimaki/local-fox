@@ -138,6 +138,11 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 
 ## Environment and commands
 
+- **macOS has basic support, never run on a Mac**: `shell_path.py` (the login shell's PATH, as an application
+  started from the Finder gets only the system's), the config in `~/Library/Application Support`, Fusion style and
+  Mac fonts (`ui/app.py`, `theme.FONT_FAMILIES`), `/Volumes/<disk>` and `~/Library` refused, `build.sh` and the spec's
+  `BUNDLE` with an `.icns` from the logo (`logo.write_icns`). Keep new code portable: no Windows-only calls without a
+  `sys.platform` check, paths through `pathlib`; `tests/test_macos.py` simulates macOS where it can.
 - Windows 11, Python 3.14. The project's own virtual environment is `.venv` (PySide6, ollama, mcp, markdown, pytest,
   pyinstaller, and ollmcp-tools with tree-sitter, installed non-editable from `..\ollmcp-generic-tools`). After
   changing the tools, reinstall them into `.venv` (`build.ps1` does it on every build) or the old copy runs.

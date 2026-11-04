@@ -16,7 +16,8 @@ EXPANDED = "#1c1c1c"   # The box of an expanded tool call, instructions, filemap
 OK = "#8fbf7f"
 ERROR = "#e06c6c"       # Removed lines of an edit; errors in the feed are ACCENT
 
-FONT_FAMILIES = ["Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Courier New"]
+# Windows, then macOS (SF Mono with Xcode or Terminal, Menlo always), then Linux
+FONT_FAMILIES = ["Cascadia Mono", "Consolas", "SF Mono", "Menlo", "DejaVu Sans Mono", "Courier New"]
 
 def stylesheet(font_size: int) -> str:
     """

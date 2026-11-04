@@ -18,6 +18,22 @@ the tools installed is needed.
 - **From the source**: `python -m venv .venv`, `.venv\Scripts\python -m pip install -r requirements.txt` and
   `.venv\Scripts\python -m pip install ..\ollmcp-generic-tools`, then `.venv\Scripts\python -m local_fox [project folder]`.
 
+### On macOS and Linux
+
+Local Fox is developed and tested on Windows; macOS has basic support, untested on a Mac so far. The commands
+are the same with `.venv/bin/python` in place of `.venv\Scripts\python` (and `python3 -m venv .venv`):
+from the source, `.venv/bin/python -m local_fox [project folder]`. `./build.sh [path to ollmcp-generic-tools]`
+builds `dist/LocalFox.app` on macOS and `dist/LocalFox/LocalFox` on Linux; it must run on the system it builds for.
+
+- **The PATH of your shell**: started from the Finder or the Dock, an application gets only the system's PATH, so
+  Local Fox asks your login shell for its PATH at the start. Programs installed with e.g. Homebrew are then found by
+  the tools' commands and by the MCP servers of `.mcp.json`.
+- **The settings** are in `~/Library/Application Support/LocalFox` on macOS and in `~/.config/LocalFox` on Linux.
+- **The look**: macOS uses Qt's Fusion style, which follows Local Fox's colors as the Windows style does, and the
+  SF Mono or Menlo font. Copy and paste are ⌘C and ⌘V.
+- **An unsigned application**: macOS blocks a built `LocalFox.app` at its first start, as it is not signed by an
+  identified developer. Open it once with right-click → "Open", or run it from the source.
+
 ### Choosing the project
 
 Local Fox starts by asking for the project, before the window opens:

@@ -1,7 +1,8 @@
 """
 The settings of Local Fox, all in one config.json.
 
-The file is in the user's application data folder (%APPDATA%/LocalFox/config.json on Windows), or where
+The file is in the user's application data folder (%APPDATA%/LocalFox/config.json on Windows, ~/Library/Application
+Support/LocalFox on macOS, ~/.config/LocalFox elsewhere), or where
 the LOCAL_FOX_CONFIG environment variable points. It is created with the defaults on the first start, and
 settings missing from it get their defaults, so that an older file keeps working after an update. The
 settings view of the window edits the same file; DESCRIPTIONS are its help texts.
@@ -64,6 +65,8 @@ def config_path() -> Path:
         return Path(os.environ["LOCAL_FOX_CONFIG"]).expanduser().resolve()
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
     else:
         base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / "LocalFox" / "config.json"

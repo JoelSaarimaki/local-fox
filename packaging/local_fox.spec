@@ -1,7 +1,11 @@
-# PyInstaller spec of the Local Fox executable. Build with build.ps1 in the repository root, or:
+# PyInstaller spec of the Local Fox executable. Build with build.ps1 (Windows) or build.sh (macOS, Linux) in the
+# repository root, or:
 #     .venv\Scripts\pyinstaller --noconfirm packaging\local_fox.spec
-# The result is dist\LocalFox\LocalFox.exe, a windowed application without a console. It bundles the tools of
-# ollmcp-generic-tools (installed into .venv by build.ps1), which it runs as LocalFox.exe --tools-server.
+# The result is dist\LocalFox\LocalFox.exe, a windowed application without a console; on macOS also
+# dist/LocalFox.app. It bundles the tools of ollmcp-generic-tools (installed into .venv by the build script), which
+# it runs as LocalFox --tools-server.
+import sys
+
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 # mcp.cli exits when imported without its extra dependencies. The server side is needed by the bundled tools.
@@ -33,7 +37,12 @@ exe = EXE(
     name="LocalFox",
     console=False,
     upx=False,
-    # Written from the logo by build.ps1 (python -m local_fox.ui.logo), so that it always matches it
-    icon="../build/local_fox.ico",
+    # Written from the logo by the build script (python -m local_fox.ui.logo), so that it always matches it
+    icon="../build/local_fox.icns" if sys.platform == "darwin" else "../build/local_fox.ico",
 )
 coll = COLLECT(exe, a.binaries, a.datas, upx=False, name="LocalFox")
+if sys.platform == "darwin":
+    # An application bundle, which macOS starts from the Finder and the Dock
+    app = BUNDLE(coll, name="LocalFox.app", icon="../build/local_fox.icns", bundle_identifier=None,
+                 info_plist={"CFBundleName": "Local Fox", "CFBundleDisplayName": "Local Fox",
+                             "NSHighResolutionCapable": True})

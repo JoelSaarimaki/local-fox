@@ -113,6 +113,22 @@ def write_ico(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(header + entries + data)
 
+# The types of an .icns file's PNG images by their size in pixels (ic10 is 512 points at double resolution)
+ICNS_TYPES = {128: b"ic07", 256: b"ic08", 512: b"ic09", 1024: b"ic10"}
+
+def write_icns(path: Path) -> None:
+    """
+    Writes the icon as a macOS .icns file, for the application bundle: a PNG image per size of ICNS_TYPES.
+    """
+    data = b""
+    for size, kind in ICNS_TYPES.items():
+        png = _png(fox_image(size))
+        data += kind + struct.pack(">I", 8 + len(png)) + png
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"icns" + struct.pack(">I", 8 + len(data)) + data)
+
 if __name__ == "__main__":
-    # python -m local_fox.ui.logo <path.ico>: build.ps1 writes the executable's icon with it
-    write_ico(Path(sys.argv[1]))
+    # python -m local_fox.ui.logo <path.ico or path.icns>: the build scripts write the application's icon with it
+    target = Path(sys.argv[1])
+    write_icns(target) if target.suffix == ".icns" else write_ico(target)

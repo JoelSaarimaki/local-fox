@@ -1,4 +1,4 @@
-# The dependencies of Local Fox. Install into the project's virtual environment:
+# The dependencies of Local Fox. Install into the project's virtual environment (.venv/bin/python on macOS and Linux):
 #     python -m venv .venv
 #     .venv\Scripts\python -m pip install -r requirements.txt
 #     .venv\Scripts\python -m pip install ..\ollmcp-generic-tools
