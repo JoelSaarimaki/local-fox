@@ -9,7 +9,7 @@ git-ignored for such notes); read it before changing behaviour if it is there.
 Local Fox is a desktop harness for local models run with Ollama and the MCP tools of
 [ollmcp-generic-tools](../ollmcp-generic-tools) (a sibling repository, `C:\Users\JoelSaarimäki\Documents\GIT\ollmcp-generic-tools`).
 It replaces ollmcp. It has a core without UI dependencies (`local_fox/`) and a PySide6 window (`local_fox/ui/`),
-packaged as a Windows executable with PyInstaller.
+packaged as a Windows executable with PyInstaller (and, untested, a macOS application bundle).
 
 The tools are **bundled, not copied**: the `ollmcp_tools` package is installed into `.venv` from the sibling
 repository and packed into the executable. The tools stay developed in their own repository, which other MCP
@@ -36,7 +36,7 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   folder; a `.mcp.json` alone is not enough). `Session.start` raises `NotSetUp` otherwise, the window opens only
   a project (`ui/project_dialog.py` before it, `MainWindow.open_project` checks again), and the CLI exits.
   **Setting up is deliberate**: only on the user's explicit action, after seeing `tools_setup.planned()`; never
-  automatic, and `tools_setup.refusal()` refuses drive roots, home folders and system folders in every front end
+  automatic, and `tools_setup.refusal()` refuses drive and disk roots, home folders, `~/Library` and system folders in every front end
   (`is_set_up` is False for them even with a tools config). Don't weaken either.
 - **The start dialog** (`ui/project_dialog.py`, run by `ui/app.py` before the window): recent projects
   (`recent_projects.py`, in the data folder, not a setting) and Choose folder (with Open on the right; Quit and Open config folder on the left); no preselection, no default button,
@@ -44,7 +44,8 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   open project later. `MainWindow` takes no project in its constructor: `app.py` calls `open_project` after the dialogs.
   Its fox is the logo, braille dots in `ui/logo.py` `FOX` (its only copy; edit it there), painted dot by dot
   (`fox_pixmap`): as text, braille comes from a fallback font with gaps between the lines that break the picture.
-  The window and exe icon is the same fox, one pixel per dot (`fox_image`); `build.ps1` writes `build/local_fox.ico`.
+  The window and application icon is the same fox, one pixel per dot (`fox_image`); the build scripts write
+  `build/local_fox.ico` (`write_ico`) or, on macOS, `build/local_fox.icns` (`write_icns`).
 
 - **Everything that goes to the model is visible** in the feed: the instructions, the filemap, the tool definitions,
   every tool call and response, error responses, thinking. Every part of `Session.messages` must have an `Entry`.
@@ -128,12 +129,14 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 | `local_fox/session_log.py` | The JSON-lines log of the run, emptied at every start |
 | `local_fox/saved_conversations.py` | Saving, listing and loading the project's conversations |
 | `local_fox/recent_projects.py` | The recent projects of the start dialog |
-| `local_fox/conversation.py` | `Entry`, the feed's data |
+| `local_fox/conversation.py` | `Entry`, the feed's data, and what is read from the entries: out-of-date and named reads, repeated calls, loops (`repeating`) |
+| `local_fox/ollama_errors.py` | Ollama's errors explained for the feed, with what to try first |
+| `local_fox/shell_path.py` | macOS: the login shell's PATH, added at the start |
 | `local_fox/config.py`, `export.py`, `cli.py` | Settings, Markdown export, the command line for testing the core |
 | `local_fox/__main__.py` | The entry point of the window and the executable; `--tools-server` runs the bundled tools instead |
-| `local_fox/ui/` | The window: `app.py` (the start), `project_dialog.py`, `main_window.py`, `settings_view.py`, `feed.py` + `render.py` (HTML), `filemap_view.py`, `prompt.py`, `bridge.py`, `theme.py` |
+| `local_fox/ui/` | The window: `app.py` (the start), `project_dialog.py`, `main_window.py`, `settings_view.py`, `feed.py` + `render.py` (HTML), `filemap_view.py`, `prompt.py`, `bridge.py`, `theme.py` (the palette and stylesheets), `logo.py` (the fox and the icons) |
 | `tools/compare.py` | Runs ollmcp-generic-tools' comparison scenarios through the core |
-| `packaging/local_fox.spec`, `build.ps1` | The executable |
+| `packaging/local_fox.spec`, `build.ps1`, `build.sh` | The executable (Windows), the application (macOS, Linux) |
 | `tests/` | Unit tests with a fake Ollama client and fake MCP servers |
 
 ## Environment and commands
@@ -145,9 +148,10 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   `sys.platform` check, paths through `pathlib`; `tests/test_macos.py` simulates macOS where it can.
 - Windows 11, Python 3.14. The project's own virtual environment is `.venv` (PySide6, ollama, mcp, markdown, pytest,
   pyinstaller, and ollmcp-tools with tree-sitter, installed non-editable from `..\ollmcp-generic-tools`). After
-  changing the tools, reinstall them into `.venv` (`build.ps1` does it on every build) or the old copy runs.
+  changing the tools, reinstall them into `.venv` (the build scripts do it on every build) or the old copy runs.
 - Tests: `.venv\Scripts\python -m pytest`. Set `LOCAL_FOX_CONFIG` to a scratch file when running anything, so the
-  user's `%APPDATA%\LocalFox\config.json` is not created or changed.
+  user's `%APPDATA%\LocalFox\config.json` is not created or changed. Don't build while the user has Local Fox open
+  (check for the `LocalFox` process): the build replaces the running executable's files.
 - Command line: `.venv\Scripts\python -m local_fox.cli --project <folder> --yes "message"`.
 - Window: `.venv\Scripts\python -m local_fox [project]`. Build: `.\build.ps1` → `dist\LocalFox\LocalFox.exe`.
 - `tools/compare.py` runs with the **system** Python (`python`), which has ollmcp-generic-tools (editable, with its
@@ -156,8 +160,8 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 - The tools' server of `.mcp.json` (`... -m ollmcp_tools`) runs with the bundled tools (`tools_setup.server_command`):
   `sys.executable -m ollmcp_tools` from the source, `LocalFox.exe --tools-server` from the executable. Other
   servers, and all servers with `bundled_tools: false`, run with the command of `.mcp.json`.
-- A throwaway test project: an empty folder with a file or two, then `--setup` on the command line (or Set up
-  tools in the window). Don't run write tasks against real repositories.
+- A throwaway test project: an empty folder with a file or two, then `--setup` on the command line (or "Set up
+  the project" in the start dialog). Don't run write tasks against real repositories.
 - Ollama runs at `http://127.0.0.1:11434`. Model runs take from tens of seconds to several minutes; run long ones in the background.
 
 ## Pitfalls already met
@@ -168,14 +172,20 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   one task of its own (`_run`) and closes them through an event; tools may be called from any task.
 - **The session runs in an asyncio loop in a background thread** (`ui/bridge.py`). The window talks to it with
   `runner.submit()`/`runner.call()`, and the session talks back only through Qt signals. Don't touch Qt widgets from the loop thread.
-- **A windowed executable has no stderr**: the servers' stderr goes to `%APPDATA%\LocalFox\logs\server-<key>.log`.
+- **A windowed executable has no stderr**: the servers' stderr goes to `logs/server-<key>.log` in the data folder,
+  and an exception in a Qt slot disappears without a trace (test the window's code paths, as below).
   It has no console either, so a console program started under it opens a console window of its own: the tools
   start every program with `CREATE_NO_WINDOW` (`NO_WINDOW` in their `common.py`). Run from source, under python.exe's
   hidden console, no windows appear, so check this with the built executable.
 - **PyInstaller**: `collect_submodules("mcp")` must leave out `mcp.cli` (it calls `sys.exit` on import); `mcp.server`
   is needed by the bundled tools. The tools import their toolsets by name, so the spec collects `ollmcp_tools`'
   submodules, its data files (the setup templates), its metadata (the version in the feed) and the tree-sitter
-  modules. An editable install is not followed by PyInstaller, so `build.ps1` installs the tools non-editable.
+  modules. An editable install is not followed by PyInstaller, so the build scripts install the tools non-editable.
+- **Qt's `clicked` passes `checked`**: PySide gives it to a slot that takes optional arguments, so "Clear" called
+  `_clear(False)` and failed silently. `main_window._button` calls its slot without arguments; connect other
+  signals the same way, and test a button with `click()`, not by calling its slot.
+- **Selected text keeps its own color** (`theme.keep_selected_text_colors`: a highlighted-text brush without a
+  color). Setting `selection-color` in the stylesheet would give all selected text one color again.
 - **The tools read their config when imported** (`common.py`), so each server is a process of its own, never
   imported into Local Fox. Only `ollmcp_tools.locations` (no config) and the package's `templates` are used
   in-process. If the tools' init or templates change (new files, renamed settings), carry it over to
@@ -215,13 +225,13 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   border and background drawn only for a box), so a heading never moves when its entry opens, and the empty lines Qt keeps
   between frames are hidden; an entry that shows nothing has an empty, hidden frame. The view follows the end only for new content (`render(follow=True)`), never when
   the user opens or closes an entry. Long lines in `<pre>` wrap (`white-space: pre-wrap`).
-- Bash heredocs that contain Python with quotes have failed to parse in this environment; write longer patch
-  scripts to the scratchpad and run them, or use the Edit tool.
+- Bash heredocs that contain Python with quotes have failed to parse in this environment, and a `\\` in them has
+  arrived as `\`; write longer patch scripts to the scratchpad with the Write tool and run them, or use the Edit tool.
 
 ## Conventions
 
-- **In texts shown to the user, put button, menu and command names in quotation marks**: 'choose "Create
-  .local-fox"', 'the "Stop" button', '"Open project" in the ≡ menu'. Without them the sentences are hard to read.
+- **In texts shown to the user, put button, menu and command names in quotation marks**: 'choose "Set up the
+  project"', 'the "Stop" button', '"Open project" in the ≡ menu'. Without them the sentences are hard to read.
   Don't mention `.ollmcp-tools` or ollmcp-tools in introductions: users are not assumed to have them.
 - Follow the style of ollmcp-generic-tools: a docstring on every module and function, written as plain sentences
   saying what it does and why; comments for the reasons that are not obvious.

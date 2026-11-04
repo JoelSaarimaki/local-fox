@@ -59,9 +59,9 @@ Local Fox starts by asking for the project, before the window opens:
   The window only ever opens a project, and the command line refuses to start in any other folder.
 - **Setting up is always deliberate**: only from the setup question (above), or `--setup` on the command line.
   `/setup` (**Set up project** in the ≡ menu) creates an open project's missing files, after confirming them.
-  Nothing is created before you confirm. A drive root (`C:\`, `D:\`), the home
-  folder and the folder of all homes, the application data folders, and system folders (Windows, Program
-  Files, `/usr`) are never set up. Setting up creates `.mcp.json` and the project's **`.local-fox` folder** and
+  Nothing is created before you confirm. A drive root (`C:\`, `D:\`, or a disk under `/Volumes`), the home
+  folder and the folder of all homes, the application data folders (and `~/Library` on macOS), and system folders
+  (Windows, Program Files, `/usr`, `/System`) are never set up. Setting up creates `.mcp.json` and the project's **`.local-fox` folder** and
   shows what to adapt next; it changes no existing file, except that a `.mcp.json` of other applications gets
   the tools' server added (the confirmation says so). The folder holds:
 
@@ -120,7 +120,7 @@ Local Fox starts by asking for the project, before the window opens:
 - **Prompt**: Enter sends, Shift + Enter adds a line, Up and Down recall sent messages, Esc stops the model.
   **There is no queue**: while the model runs, Enter does not send (the button is **Stop**); the message stays
   in the input, and a tooltip says to stop the model (Esc) or wait. Stopping and then pressing Enter sends it.
-- **Copy and paste** are the usual Ctrl + C, Ctrl + X and Ctrl + V, and nothing is copied or pasted on its
+- **Copy and paste** are the usual Ctrl + C, Ctrl + X and Ctrl + V (⌘ on macOS), and nothing is copied or pasted on its
   own. In the feed, select text with the mouse and press Ctrl + C; the selection stays while a reply streams
   in. Pasting into the prompt only inserts the text, whatever it contains (line breaks, a leading `/`): only
   Enter typed by you sends. The filemap's **Copy path** and **Add path to prompt** are the only other ways.
@@ -130,8 +130,9 @@ Commands: `/clear`, `/export`, `/instructions`, `/model [name]`, `/context [size
 
 ## Settings
 
-Every setting is in `config.json`, in `%APPDATA%\LocalFox` (or where `LOCAL_FOX_CONFIG` points); `/config`
-opens its folder, and a clear reads it again.
+Every setting is in `config.json`, in `%APPDATA%\LocalFox` on Windows, `~/Library/Application Support/LocalFox`
+on macOS and `~/.config/LocalFox` on Linux (or where `LOCAL_FOX_CONFIG` points); `/config` opens its folder, and
+a clear reads it again.
 
 **The settings view** (`/settings`, or **Settings** in the ≡ menu) shows the same file as a form, with what each
 setting does. **Save** writes it: the model and context size apply at once, the others from the next clear.
@@ -167,7 +168,8 @@ Local Fox keeps one log of the current run: `logs/session.jsonl` next to `config
 written as it happens, with every conversation of the run (each clear starts a new one with a `conversation`
 line). The output of the MCP servers (their stderr) is in `logs/server-<key>.log`. **Every start of Local Fox
 empties them**, so after something goes wrong the log is right there and holds only that run; save a copy before
-starting again if you need it. `/log` (or **Open config folder** in the ≡ menu) opens the folder.
+starting again if you need it. `/log` opens the `logs` folder (**Open config folder** in the ≡ menu, the folder
+it is in).
 
 Unlike the export, the log is written without asking and holds what the feed does not show:
 
@@ -176,9 +178,13 @@ Unlike the export, the log is written without asking and holds what the feed doe
 | `conversation` | The version, project, model, context size, all settings, and the servers with their tool counts and errors |
 | `system`, `tools` | The system message (again when the instructions are reloaded) and the tool definitions as sent |
 | `request` | One request to Ollama: its options and thinking setting, and the messages added since the request before |
-| `reply` | The reply, thinking and tool calls as the model made them, why it stopped, the token counts and the durations |
+| `reply` | The reply, thinking and tool calls as the model made them, why it stopped (`repeating` when Local Fox stopped a loop), the token counts and the durations |
 | `tool` | A call by the name the model used, the tool that ran, the arguments, status, response and duration |
+| `made_room` | Tool responses replaced with a note to fit the context: which, how many tokens, and the estimate after |
+| `context_note` | The note added to a tool response when the context fills or room was made |
+| `cut` | Ollama's count of a request dropped without a removal: it cut the conversation, and the turn stopped |
 | `decision` | A question to the user, the options and the choice |
+| `reopen` | A saved conversation reopened: its file and how many entries and messages it had |
 | `notice`, `error`, `setting`, `close` | The notices and errors of the feed, model and context changes, the end |
 
 The system message and the messages of the requests make up exactly what the model was given. Images are
@@ -286,12 +292,13 @@ of its own). When a project opens, the notice bar offers to reopen its last conv
 **≡ > Conversations** lists all of them, and `/reopen` reopens the last one. A reopened conversation starts as a
 new one, with the instructions, filemap and tools as they are now, followed by the saved messages, and goes on
 being saved to the same file. A clear starts a new file. Delete the files you do not need from the folder.
+
 ## The core and its command line
 
 The core (`local_fox` without `local_fox.ui`) needs only `ollama` and `mcp`. A small command line runs it:
 
 ```bash
-python -m local_fox.cli --project <folder> [--model flint:40b] [--context 65536] [--yes] [--verbose] [--setup] ["first message"]
+.venv\Scripts\python -m local_fox.cli --project <folder> [--model flint:40b] [--context 65536] [--yes] [--verbose] [--setup] ["first message"]
 # The folder must be a project; --setup sets it up first (never a drive root or system folder)
 ```
 
@@ -313,8 +320,11 @@ stall (it is counted instead).
 ## Tests
 
 ```bash
-.venv\Scripts\python -m pytest
+.venv\Scripts\python -m pytest      # .venv/bin/python on macOS and Linux
 ```
+
+Set `LOCAL_FOX_CONFIG` to a scratch file when running the tests, or Local Fox for testing, so that your own
+`config.json` is not created or changed.
 
 ## Not built yet
 

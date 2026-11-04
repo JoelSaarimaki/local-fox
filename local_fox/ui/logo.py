@@ -4,7 +4,7 @@ The fox of Local Fox, in braille dots (each character a 2 x 4 cell of dots): FOX
 It is drawn in two ways. In the start dialog each dot is a small round dot on an even grid (as text, braille comes
 from a fallback font with gaps between the lines, which break the picture). As the icon of the window and the
 executable, each dot is one pixel in the accent color on the window's background, scaled up in whole pixels so
-that it stays sharp; write_ico writes the executable's icon for build.ps1.
+that it stays sharp; write_ico and write_icns write the application's icon for build.ps1 and build.sh.
 """
 import struct
 import sys

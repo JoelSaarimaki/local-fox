@@ -290,7 +290,7 @@ def set_up(project: Path) -> str:
     """
     if not bundled_version():
         raise RuntimeError("This Local Fox was built without its tools (ollmcp-generic-tools). Build it again with "
-                           "build.ps1, or install the tools into the environment it runs in.")
+                           "build.ps1 (build.sh on macOS and Linux), or install the tools into the environment it runs in.")
     # The tools' user config file (~/.ollmcp-tools/user-config.json) is not created: the API key of the web tools
     # is a setting of Local Fox, given to the tools' server when it starts
     from ollmcp_tools.locations import default_backup_folder
