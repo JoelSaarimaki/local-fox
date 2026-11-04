@@ -125,7 +125,7 @@ that does not start with the new config shows its error in the feed.
 | Setting | Default | |
 |---|---|---|
 | `ollama_host` | `http://127.0.0.1:11434` | Where Ollama runs |
-| `ollama_api_key` | empty | Your Ollama API key for the web tools (search and fetch through ollama.com; create one at ollama.com/settings/keys). Empty: the web tools are not offered. Given only to the tools' server when it starts, never to the model, and not written to the log; hidden in the settings view |
+| `ollama_api_key` | empty | Your Ollama API key for the web tools (search and fetch through ollama.com; create one at ollama.com/settings/keys). Empty: the web tools are not offered (a key in the tools' own `~/.ollmcp-tools/user-config.json` is not used). Given only to the tools' server when it starts, never to the model, and not written to the log; hidden in the settings view |
 | `model` | `flint:40b` | Also set by the model menu |
 | `num_ctx` | `65536` | The context size sent with every request; with flint:40b a larger one needs little memory |
 | `think` | `null` | `null`: on for models that can think; `true`, `false` or a level such as `"high"` |

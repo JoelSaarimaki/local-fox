@@ -37,7 +37,7 @@ REMOVED = {"session_log", "session_log_days", "tool_calls_collapsed", "project_d
 DESCRIPTIONS = {
     "ollama_host": "Where Ollama runs.",
     "ollama_api_key": "Your Ollama API key, for the web tools (web search and fetch through ollama.com); empty: the web tools are "
-                      "not offered. Create one at ollama.com/settings/keys. It is given only to the tools' server, never to the "
+                      "not offered, also if the tools' own user config file has a key. Create one at ollama.com/settings/keys. It is given only to the tools' server, never to the "
                       "model, and applies when the tools restart (\"Restart tools and clear\", or opening the project again).",
     "model": "The model, as Ollama names it. Also set by the model menu.",
     "num_ctx": "The context size in tokens, sent with every request. Ollama uses 4 096 tokens when none is sent. A larger "

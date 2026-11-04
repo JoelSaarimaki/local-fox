@@ -114,9 +114,13 @@ class Servers:
         log.flush()
         env = {**os.environ, "PYTHONIOENCODING": "utf-8", **{k: str(v) for k, v in (spec.get("env") or {}).items()}, **self.extra_env}
         # The Ollama API key of the settings goes only to the tools' server, which does not pass it on to the commands
-        # it runs; other servers of .mcp.json never get it. Empty, the tools use their user config file, if any.
-        if self.api_key and runs_the_tools(spec):
+        # it runs; other servers of .mcp.json never get it, also not from Local Fox's own environment. The tools' server
+        # always gets the variable, empty for no key: set, it decides alone, so the tools never take a key from their
+        # user config file (~/.ollmcp-tools/user-config.json) that the settings do not show.
+        if runs_the_tools(spec):
             env[API_KEY_ENV_VAR] = self.api_key
+        else:
+            env.pop(API_KEY_ENV_VAR, None)
         cwd = Path(spec["cwd"]) if spec.get("cwd") else self.project
         params = StdioServerParameters(command=command, args=args, env=env,
                                        cwd=str(cwd if cwd.is_absolute() else self.project / cwd))

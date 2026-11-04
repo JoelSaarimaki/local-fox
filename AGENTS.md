@@ -98,8 +98,9 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   are deliberately no settings for it. New things sent to the model or decided by the user should be logged too.
 - **Secrets** (`config.SECRETS`: the `ollama_api_key`): logged only as whether they are set (`config.without_secrets`),
   hidden in the settings view. The key goes to the tools' server alone, in `MCP_TOOLS_OLLAMA_API_KEY`
-  (`tools_setup.API_KEY_ENV_VAR`, `Servers._enter`); the tools keep it from the commands they run. Empty, the tools
-  fall back to their user config file (`~/.ollmcp-tools/user-config.json`), which Local Fox no longer creates.
+  (`tools_setup.API_KEY_ENV_VAR`, `Servers._enter`); the tools keep it from the commands they run. The variable is
+  always set for the tools' server, empty for no key, so the tools never take a key from their user config file
+  (`~/.ollmcp-tools/user-config.json`, which Local Fox neither creates nor reads): the setting is the only place.
 
 ## Layout
 

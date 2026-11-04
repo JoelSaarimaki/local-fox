@@ -48,7 +48,11 @@ def test_the_api_key_goes_only_to_the_tools_server(monkeypatch, tmp_path):
     other = {"command": "node", "args": ["server.js"]}
     assert server_env(monkeypatch, tmp_path, tools, " key ")["MCP_TOOLS_OLLAMA_API_KEY"] == "key"
     assert "MCP_TOOLS_OLLAMA_API_KEY" not in server_env(monkeypatch, tmp_path, other, "key")
-    assert "MCP_TOOLS_OLLAMA_API_KEY" not in server_env(monkeypatch, tmp_path, tools, "")  # The user config file, if any
+    # No key: still set, empty, so that the tools do not take one from their user config file
+    assert server_env(monkeypatch, tmp_path, tools, "")["MCP_TOOLS_OLLAMA_API_KEY"] == ""
+    monkeypatch.setenv("MCP_TOOLS_OLLAMA_API_KEY", "from-the-environment")
+    assert "MCP_TOOLS_OLLAMA_API_KEY" not in server_env(monkeypatch, tmp_path, other, "key")
+    assert server_env(monkeypatch, tmp_path, tools, "")["MCP_TOOLS_OLLAMA_API_KEY"] == ""
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):
