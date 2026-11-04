@@ -40,7 +40,7 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   (`is_set_up` is False for them even with a tools config). Don't weaken either.
 - **The start dialog** (`ui/project_dialog.py`, run by `ui/app.py` before the window): recent projects
   (`recent_projects.py`, in the data folder, not a setting) and Choose folder (with Open on the right; Quit and Open config folder on the left); no preselection, no default button,
-  Enter ignored; the setup question has Create .local-fox and Back. Closing a dialog quits at the start and keeps the
+  Enter ignored; the setup question has Set up the project and Back. Closing a dialog quits at the start and keeps the
   open project later. `MainWindow` takes no project in its constructor: `app.py` calls `open_project` after the dialogs.
   Its fox is the logo, braille dots in `ui/logo.py` `FOX` (its only copy; edit it there), painted dot by dot
   (`fox_pixmap`): as text, braille comes from a fallback font with gaps between the lines that break the picture.

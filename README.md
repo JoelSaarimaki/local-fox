@@ -24,7 +24,7 @@ Local Fox starts by asking for the project, before the window opens:
   and has **Choose folder** (next to **Open**), **Quit**, and **Open config folder** (the folder of `config.json`). Nothing is selected at first and Enter does nothing: a project opens with **Open**
   or a double click.
 - **A folder that is not a project yet** gets the setup question: the folder, exactly what setting it up would
-  create or change, **Create .local-fox**, and **Back** to the start dialog. A drive root or system folder gets
+  create or change, **Set up the project**, and **Back** to the start dialog. A drive root or system folder gets
   only the reason and **Back**.
 - **Closing either dialog (X, Esc, Quit) quits Local Fox** before anything else starts.
 - A folder given as an argument (`LocalFox.exe C:\...\project`) opens at once if it is a project, otherwise it

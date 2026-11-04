@@ -4,7 +4,7 @@ folder that is not a project yet. Local Fox starts with them, before the window,
 
 Opening is always deliberate: nothing is selected at first, Enter does nothing, and a project opens only with
 Open or a double click. A folder that is not a project gets the setup question, which lists what setting it up
-creates, with Create .local-fox and Back (to the projects). A drive root or system folder is never set up or
+creates, with "Set up the project" and Back (to the projects). A drive root or system folder is never set up or
 opened (tools_setup.refusal). Closing a dialog (X, Esc) cancels: at the start that quits Local Fox, later it
 keeps the open project.
 """
@@ -172,7 +172,7 @@ def _text(text: str, style: str) -> QLabel:
 class SetupDialog(_NoEnterDialog):
     """
     The question for a folder that is not a project: what setting it up changes in existing files (on its own, in the
-    accent color) and what it creates, with "Create .local-fox" and "Back".
+    accent color) and what it creates, with "Set up the project" and "Back".
     A folder that must not be set up gets the reason and Back only. exec() returns Accepted for Create, BACK for
     Back, and Rejected when it is closed.
     """
@@ -211,12 +211,12 @@ class SetupDialog(_NoEnterDialog):
             listed = "\n".join(f"    {item}" for item in created)
             layout.addWidget(_text(f"Setting it up creates:\n\n{listed}\n\nThe AI's tools can then read and change the files "
                                    "in this folder and its subfolders, except the paths you forbid. Nothing is created or "
-                                   "changed unless you choose \"Create .local-fox\".", "dim"), 1)
+                                   "changed unless you choose \"Set up the project\".", "dim"), 1)
         buttons = QHBoxLayout()
         buttons.addWidget(_button("Back", lambda: self.done(BACK)))
         buttons.addStretch(1)
         if not reason:
-            buttons.addWidget(_button("Create .local-fox", self.accept, primary=True))
+            buttons.addWidget(_button("Set up the project", self.accept, primary=True))
         layout.addLayout(buttons)
 
 def choose_project(parent=None, startup: bool = True, folder: Path | None = None) -> tuple[Path, str] | None:

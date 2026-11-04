@@ -64,7 +64,7 @@ def test_setup_question(app, tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()
     question = SetupDialog(plain)
-    assert buttons(question) == ["Back", "Create .local-fox"]
+    assert buttons(question) == ["Back", "Set up the project"]
     enter(question)
     assert question.result() == QDialog.Rejected and not (plain / ".local-fox").exists()
     root = SetupDialog(Path(tmp_path.anchor))
