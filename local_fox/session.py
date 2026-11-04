@@ -44,11 +44,15 @@ REREADS_TO_ASK = 3
 # keeps reading until the context is full then has its findings only in responses about to be removed. One step can
 # add more than the rest of the room (several whole files), so making room tells the model too (ROOM_MADE_NOTE).
 WARN_AT = 0.85
-CONTEXT_WARNING = ("\n\n[Local Fox: this conversation now uses about {used} of the {budget} tokens the context allows. "
-                   "Read only what you still need: first write down what you have found, in your plan, your change or "
-                   "your answer, as older tool responses will soon be removed to make room.]")
+# The notes name what to do in each mode of the instructions template: "write down what you have found" alone read
+# as taking notes, and gave an implementing model no reason to make the change before reading more.
+USE_WHAT_YOU_FOUND = ("Do not read again what you have already read. If you are answering, answer now with what you know. "
+                      "If you are planning, save the plan now. If you are implementing, make the change now, reading only "
+                      "the part you edit, and finish the steps you started.")
+CONTEXT_WARNING = ("\n\n[Local Fox: this conversation now uses about {used} of the {budget} tokens the context allows, and "
+                   "older tool responses will soon be removed to make room. " + USE_WHAT_YOU_FOUND + "]")
 ROOM_MADE_NOTE = ("\n\n[Local Fox: the context was full, so the responses of {count} older tool calls were replaced with "
-                  "notes. Write down what you have found, in your plan, your change or your answer, before reading more.]")
+                  "notes. " + USE_WHAT_YOU_FOUND + "]")
 CUT_OFF_MARK = "\n\n[This reply was cut off here: the context was full.]"
 # The parts of the feed of which the latest is kept open
 TOOL_CALL, THINKING, ANSWER = "tool call", "thinking", "answer"
@@ -726,7 +730,7 @@ class Session:
     def _note_to_model(self, note: str) -> None:
         """
         Tells the model about its context (filling, or room made) at the end of the newest tool response, which it
-        reads next: to write down what it has found before reading more, in any mode and with any model, as older
+        reads next: to use what it has found (answer, save the plan, or make the change) before reading more, as older
         responses are or will be removed. The note is in the response the feed shows, and in the log. A message of the
         user is never changed: when the newest message is theirs, the model gets no note.
         """

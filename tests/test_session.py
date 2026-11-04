@@ -558,7 +558,7 @@ def test_the_model_is_told_when_the_context_is_filling(tmp_path):
     session = run_reads(tmp_path, 8750)
     noted = [e for e in session.entries if e.kind == c.TOOL and "[Local Fox: " in e.response]
     assert len(noted) == 1 and not any(e.removed for e in session.entries)  # Once per fill, before room is needed
-    assert "Read only what you still need: first write down what you have found" in noted[0].response
+    assert "If you are implementing, make the change now" in noted[0].response
     assert tool_messages(session)[-1] == noted[0].response  # The model gets what the feed shows
     assert '"context_note"' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
 
