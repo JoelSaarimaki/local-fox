@@ -156,7 +156,7 @@ def test_long_lines_wrap_and_an_open_tool_call_is_boxed(app):
     assert feed._frames[0][1].frameFormat().background().style() == Qt.NoBrush
 
 def test_context_sizes_double_up_to_the_models_maximum():
-    from local_fox.ui.main_window import context_sizes
+    from local_fox.ui.settings_view import context_sizes
     assert context_sizes(65536, 262144) == [4096, 8192, 16384, 32768, 65536, 131072, 262144]
     assert context_sizes(50000, 131072) == [4096, 8192, 16384, 32768, 50000, 65536, 131072]  # A size set with /context stays
     assert context_sizes(32768, None)[-1] == 1_048_576  # The model's maximum not known

@@ -20,11 +20,12 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBox
 
 from .. import config as config_module
 from .. import tools_config
+from ..conversation import format_number
 
 # Settings whose default is null, by what they take
 KINDS = {"think": "think", "temperature": "float?", "seed": "int?", "max_steps": "int?"}
 # The smallest and largest of the whole-number settings
-RANGES = {"num_ctx": (512, 10_000_000), "font_size": (6, 40), "filemap_max_tokens": (1, 1_000_000)}
+RANGES = {"font_size": (6, 40), "filemap_max_tokens": (1, 1_000_000)}
 THINK_CHOICES = ["", "true", "false", "low", "medium", "high"]
 
 def kind_of(key: str) -> str:
@@ -47,14 +48,28 @@ def kind_of(key: str) -> str:
 class SettingsError(Exception):
     pass
 
+def context_sizes(current: int, maximum: int | None) -> list[int]:
+    """
+    Returns the context sizes to choose from, in the settings and for the session: 4 096 tokens doubled up to the
+    model's maximum (or 1 048 576 if it is not known), the maximum itself, and the current size, which may be
+    anything set with /context or in config.json. Doubling steps are the ones that make a difference in memory and
+    in what fits; finer ones are for /context and config.json.
+    """
+    limit = maximum or 1_048_576
+    sizes = {4096 * 2 ** i for i in range(9) if 4096 * 2 ** i <= limit} | {limit, current}
+    return sorted(sizes)
+
 class AppSettingsForm(QWidget):
     """
     The settings of config.json as a form. values() returns them as they would be saved.
     """
 
-    def __init__(self, values: dict, models: list[str] | None = None, tools: list[str] | None = None):
+    def __init__(self, values: dict, models: list[str] | None = None, tools: list[str] | None = None,
+                 max_contexts: dict[str, int] | None = None):
         super().__init__()
         self.fields: dict[str, QWidget] = {}
+        # The largest context of the configured model, if known (from the open session): the last size offered
+        self.max_context = (max_contexts or {}).get(values.get("model"))
         form = QFormLayout(self)
         form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
         form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
@@ -69,6 +84,14 @@ class AppSettingsForm(QWidget):
         if kind == "bool":
             field = QCheckBox()
             field.setChecked(bool(value))
+            return field
+        if key == "num_ctx" and isinstance(value, int):
+            # The same sizes as the session's context dialog; a size of its own is kept in config.json as it is
+            field = QComboBox()
+            field.setMinimumWidth(160)
+            for size in context_sizes(value, self.max_context):
+                field.addItem(f"{format_number(size)} tokens", size)
+            field.setCurrentIndex(field.findData(value))
             return field
         if kind == "int" and isinstance(value, int):
             field = QSpinBox()
@@ -116,6 +139,9 @@ class AppSettingsForm(QWidget):
                 continue
             if isinstance(field, QSpinBox):
                 values[key] = field.value()
+                continue
+            if isinstance(field, QComboBox) and field.currentData() is not None:
+                values[key] = field.currentData()  # A choice with its value, e.g. the context size
                 continue
             text = (field.currentText() if isinstance(field, QComboBox) else field.text()).strip()
             try:
@@ -245,7 +271,8 @@ class SettingsDialog(QDialog):
     saved = Signal(dict, bool, bool)
     open_folder = Signal()
 
-    def __init__(self, parent, models: list[str] | None = None, tools: list[str] | None = None, project: Path | None = None):
+    def __init__(self, parent, models: list[str] | None = None, tools: list[str] | None = None, project: Path | None = None,
+                 max_contexts: dict[str, int] | None = None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.resize(820, 760)
@@ -268,7 +295,7 @@ class SettingsDialog(QDialog):
             layout.addWidget(warning)
 
         self.tabs = QTabWidget()
-        self.app_form = AppSettingsForm(values, models, tools)
+        self.app_form = AppSettingsForm(values, models, tools, max_contexts)
         self.tabs.addTab(_scrolled(self.app_form), "Local Fox")
         self.tools_form: ToolsConfigForm | None = None
         if project:

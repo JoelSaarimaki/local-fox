@@ -26,7 +26,7 @@ from .feed import Feed
 from .filemap_view import FilemapView
 from .project_dialog import choose_project
 from .prompt import PromptInput
-from .settings_view import SettingsDialog
+from .settings_view import SettingsDialog, context_sizes
 
 HELP = f"""Commands:
 /clear            start a new session, with the instructions and the filemap again
@@ -56,16 +56,6 @@ def _button(text: str, slot, name: str = "", tip: str = "") -> QPushButton:
     button.setCursor(Qt.PointingHandCursor)
     button.clicked.connect(slot)
     return button
-
-def context_sizes(current: int, maximum: int | None) -> list[int]:
-    """
-    Returns the context sizes to choose from: 4 096 tokens doubled up to the model's maximum (or 1 048 576 if it is
-    not known), the maximum itself, and the current size, which may be anything set with /context or config.json.
-    Doubling steps are the ones that make a difference in memory and in what fits; finer ones are for /context.
-    """
-    limit = maximum or 1_048_576
-    sizes = {4096 * 2 ** i for i in range(9) if 4096 * 2 ** i <= limit} | {limit, current}
-    return sorted(sizes)
 
 class MainWindow(QMainWindow):
     def __init__(self, settings: dict, config_error: str | None = None):
@@ -572,7 +562,9 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass  # The model is typed instead
         tools = [t.exposed for t in session.servers.tools] if session and session.servers else []
-        dialog = SettingsDialog(self, models, tools, self._project())
+        # The session's model's largest context, for the context sizes offered if config.json names the same model
+        known = {session.model: session.max_context} if session and session.max_context else {}
+        dialog = SettingsDialog(self, models, tools, self._project(), known)
         dialog.open_folder.connect(self._open_config)
         dialog.saved.connect(self._settings_saved)
         dialog.exec()

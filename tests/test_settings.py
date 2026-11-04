@@ -39,6 +39,18 @@ def test_form_gives_back_the_settings(app):
     assert AppSettingsForm(values, models=["flint:40b"]).values() == values
     assert AppSettingsForm(config.DEFAULTS).values() == config.DEFAULTS
 
+def test_context_size_is_chosen_from_the_sizes_of_the_sessions_dialog(app):
+    from local_fox.ui.settings_view import AppSettingsForm
+    form = AppSettingsForm({**config.DEFAULTS, "model": "flint:40b", "num_ctx": 65536}, max_contexts={"flint:40b": 262144})
+    field = form.fields["num_ctx"]
+    assert [field.itemData(i) for i in range(field.count())] == [4096, 8192, 16384, 32768, 65536, 131072, 262144]
+    assert field.currentText() == "65 536 tokens"
+    field.setCurrentIndex(field.findData(131072))
+    assert form.values()["num_ctx"] == 131072
+    # A size of its own in config.json stays as it is; another model's maximum is not known
+    form = AppSettingsForm({**config.DEFAULTS, "model": "gemma4:26b", "num_ctx": 50000}, max_contexts={"flint:40b": 262144})
+    assert form.values()["num_ctx"] == 50000 and form.fields["num_ctx"].itemData(form.fields["num_ctx"].count() - 1) == 1_048_576
+
 def test_form_reports_wrong_numbers(app):
     from local_fox.ui.settings_view import AppSettingsForm, SettingsError
     form = AppSettingsForm(config.DEFAULTS)
