@@ -104,3 +104,17 @@ def feed_css() -> str:
     .removed {{ color: {ERROR}; }}
     .accent {{ color: {ACCENT}; }}
     """
+
+def keep_selected_text_colors(app) -> None:
+    """
+    Makes selected text keep its own color (light text, yellow code, orange links) on the selection's background,
+    which is enough to show the selection. Qt's highlighted text color turned it black in the input and white in
+    the feed. A highlighted-text brush without a color leaves the text's own color when it is drawn. Called before
+    the stylesheet is set, which takes the application's palette as its base.
+    """
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QBrush, QPalette
+    palette = app.palette()
+    for group in (QPalette.Active, QPalette.Inactive):
+        palette.setBrush(group, QPalette.HighlightedText, QBrush(Qt.NoBrush))
+    app.setPalette(palette)

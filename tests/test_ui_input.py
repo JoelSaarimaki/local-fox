@@ -247,3 +247,10 @@ def test_the_buttons_call_their_slots_without_arguments(app):
         calls.append((settings, restart_tools))
     _button("Clear", slot).click()
     assert calls == [(None, False)]
+
+def test_selected_text_keeps_its_own_color(app):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QPalette
+    from local_fox.ui import theme
+    theme.keep_selected_text_colors(app)
+    assert app.palette().brush(QPalette.Active, QPalette.HighlightedText).style() == Qt.NoBrush

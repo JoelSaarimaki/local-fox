@@ -43,6 +43,7 @@ def main() -> int:
     font.setStyleHint(QFont.Monospace)
     font.setPointSize(settings.get("font_size", 10))
     app.setFont(font)
+    theme.keep_selected_text_colors(app)
     app.setStyleSheet(theme.stylesheet(settings.get("font_size", 10)))
     if config_error:
         QMessageBox.warning(None, APP_NAME, f"config.json: {config_error}\nThe defaults are used until it is fixed.")
