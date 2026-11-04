@@ -238,3 +238,12 @@ def test_opening_an_entry_does_not_move_its_heading(app):
     feed.render(follow=False)
     app.processEvents()
     assert heading() == closed and "x = 1" in feed.toPlainText()
+
+def test_the_buttons_call_their_slots_without_arguments(app):
+    # "Clear" got the clicked signal's checked=False as its settings and did nothing
+    from local_fox.ui.main_window import _button
+    calls = []
+    def slot(settings=None, restart_tools=False):
+        calls.append((settings, restart_tools))
+    _button("Clear", slot).click()
+    assert calls == [(None, False)]

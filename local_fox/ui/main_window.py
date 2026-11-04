@@ -57,7 +57,9 @@ def _button(text: str, slot, name: str = "", tip: str = "") -> QPushButton:
     if tip:
         button.setToolTip(tip)
     button.setCursor(Qt.PointingHandCursor)
-    button.clicked.connect(slot)
+    # The slot is called without the "checked" argument of clicked: PySide passed it to a slot with optional
+    # parameters, so "Clear" called _clear(False), which failed silently in the windowed executable
+    button.clicked.connect(lambda checked=False: slot())
     return button
 
 class MainWindow(QMainWindow):
