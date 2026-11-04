@@ -46,6 +46,9 @@ Keys: Enter sends, Shift+Enter adds a line, Up and Down recall sent messages, Es
 Right-click a file in the filemap to add its path to the prompt."""
 
 REOPEN = "Reopen it"
+# Closes a notice's bar without its actions. Only notices get it: a question the session waits on (an approval, the
+# step limit) is answered with one of its own options, and the notice stays in the feed either way.
+DISMISS = "Dismiss"
 
 def _button(text: str, slot, name: str = "", tip: str = "") -> QPushButton:
     button = QPushButton(text)
@@ -336,7 +339,7 @@ class MainWindow(QMainWindow):
         if new:
             entry = next((e for e in reversed(self.session.entries) if e.id == entry_id), None)
             if entry and entry.kind == c.NOTICE and entry.actions:
-                self._show_notice(entry.text, entry.actions, self._notice_action)
+                self._show_notice(entry.text, entry.actions + [DISMISS], self._notice_action)
         self.feed.schedule()
 
     def _update_status(self) -> None:
@@ -404,7 +407,9 @@ class MainWindow(QMainWindow):
 
     def _notice_action(self, action: str) -> None:
         self._hide_notice()
-        if action == "Clear":
+        if action == DISMISS:
+            self._reopen_offer = None  # The conversations stay in the ≡ menu
+        elif action == "Clear":
             self._clear()
         elif action == "Export":
             self._export()

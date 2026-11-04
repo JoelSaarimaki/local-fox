@@ -189,3 +189,23 @@ def test_new_entries_replace_the_feed(app):
     feed.set_entries([c.Entry(c.INSTRUCTIONS, title="Project instructions", text="new")])
     app.processEvents()
     assert feed.toPlainText().count("Project instructions") == 1 and "Old question" not in feed.toPlainText()
+
+def test_a_notice_can_be_dismissed_but_a_question_cannot(app):
+    from local_fox.ui.main_window import DISMISS, REOPEN, MainWindow
+    window = MainWindow(dict(config.DEFAULTS))
+    buttons = lambda: [window.notice_buttons.itemAt(i).widget().text() for i in range(window.notice_buttons.count())]
+    try:
+        notice = c.Entry(c.NOTICE, text="The last conversation in this project: …", actions=[REOPEN])
+        window.session = SimpleNamespace(entries=[notice], rules=None)
+        window._reopen_offer = "a saved conversation"
+        window._on_entry(notice.id, True)
+        assert buttons() == [REOPEN, DISMISS] and not window.notice_bar.isHidden()
+        window._notice_action(DISMISS)
+        assert window.notice_bar.isHidden() and window._reopen_offer is None
+        assert window.session.entries == [notice]  # The notice stays in the feed
+        app.processEvents()
+        window._show_notice("Run edit_file?", ["Allow", "Skip", "Stop"], lambda option: None)  # An approval
+        assert DISMISS not in buttons()
+    finally:
+        window.session = None
+        window.close()
