@@ -209,3 +209,21 @@ def test_a_notice_can_be_dismissed_but_a_question_cannot(app):
     finally:
         window.session = None
         window.close()
+
+def test_a_reply_with_only_tool_calls_leaves_no_gap(app):
+    # The reply streams in ("…"), ends without text, and the tool call comes after it
+    tool = lambda: c.Entry(c.TOOL, tool="read_file_with_metadata", args={"path": "a.py"}, response="x", status=c.OK, collapsed=True)
+    height = lambda feed: feed.document().documentLayout().documentSize().height()
+    plain = _feed(app, [tool(), tool()])
+    reply = c.Entry(c.ASSISTANT, streaming=True)
+    feed = _feed(app, [tool(), reply])
+    reply.streaming = False
+    feed.render()
+    feed.entries.append(tool())
+    feed.render()
+    app.processEvents()
+    assert height(feed) <= height(plain) + 3  # Only the empty frame's margins
+    reply.text = "Now it has text."
+    feed.render()
+    app.processEvents()
+    assert "Now it has text." in feed.toPlainText() and height(feed) > height(plain) + 10

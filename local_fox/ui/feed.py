@@ -115,7 +115,16 @@ class Feed(QTextBrowser):
             text_list.remove(cursor.block())
         cursor.setBlockFormat(QTextBlockFormat())
         cursor.setCharFormat(QTextCharFormat())
-        cursor.insertHtml(html or "&nbsp;")
+        # An entry that shows nothing (a reply with only tool calls) keeps its frame, as frames follow the entries,
+        # but its empty block and the empty line Qt keeps after every frame are hidden: shown, they left a blank space
+        # between the tool calls
+        document = frame.document()
+        for block in (cursor.block(), document.findBlock(frame.lastPosition() + 1)):
+            if block.isValid() and block.isVisible() != bool(html):
+                block.setVisible(bool(html))
+                document.markContentsDirty(block.position(), block.length())  # Laid out again
+        if html:
+            cursor.insertHtml(html)
 
     def render(self, follow: bool = True) -> None:
         """
