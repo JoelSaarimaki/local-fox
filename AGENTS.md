@@ -164,6 +164,9 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 - **The session runs in an asyncio loop in a background thread** (`ui/bridge.py`). The window talks to it with
   `runner.submit()`/`runner.call()`, and the session talks back only through Qt signals. Don't touch Qt widgets from the loop thread.
 - **A windowed executable has no stderr**: the servers' stderr goes to `%APPDATA%\LocalFox\logs\server-<key>.log`.
+  It has no console either, so a console program started under it opens a console window of its own: the tools
+  start every program with `CREATE_NO_WINDOW` (`NO_WINDOW` in their `common.py`). Run from source, under python.exe's
+  hidden console, no windows appear, so check this with the built executable.
 - **PyInstaller**: `collect_submodules("mcp")` must leave out `mcp.cli` (it calls `sys.exit` on import); `mcp.server`
   is needed by the bundled tools. The tools import their toolsets by name, so the spec collects `ollmcp_tools`'
   submodules, its data files (the setup templates), its metadata (the version in the feed) and the tree-sitter
