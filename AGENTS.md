@@ -64,7 +64,10 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   whole file only the section it needs, as an invitation to re-read made flint read back each removed file. Room is
   made down to `ROOM_TARGET` (three quarters) of the budget: every removal makes Ollama process the whole prompt again
   (2 to 3 minutes for 55 000 tokens on the CPU), so it must be seldom. After `REREADS_TO_ASK` calls in one turn
-  that repeat a removed call (`conversation.same_call`), the user is asked (`_ask_about_rereads`). They are marked in
+  that repeat a removed call (`conversation.same_call`), the user is asked (`_ask_about_rereads`). The model is told
+  that its context fills (`_note_to_model`: `CONTEXT_WARNING` once per fill at `WARN_AT`, `ROOM_MADE_NOTE` whenever
+  room is made, as one step can fill the rest at once), at the end of the newest tool response and of its entry, never
+  in a message of the user; appending at the end keeps Ollama's cached prompt. They are marked in
   the feed (`Entry.removed`).
   The order comes from the calls, never from the model: don't add a tool for the model to flag what it needs (it
   costs definitions on every request, and the small models judge it poorly). If it still does not fit, it is not sent; and a drop in

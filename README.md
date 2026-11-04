@@ -231,6 +231,10 @@ model goes on without knowing its task. Local Fox keeps that from happening:
   it): you named them for the model to know. If even those have to go, the feed says so. Your messages, the
   model's replies and the latest step's tool responses always stay, so the model keeps its task and can read a
   file again. The feed says so, and marks those tool calls "(response removed from the model's context)".
+- **The model is told when its context fills**: at 85 % of the room, and whenever room was made, a note at the end
+  of the newest tool response tells it to write down what it has found (in its plan, change or answer) before reading
+  more. The note is part of the response the feed shows. Models that read until the context is full otherwise keep
+  their findings only in the responses that are removed next.
 - **If it still does not fit**, the request is not sent, and the feed offers **Clear**, **Export** and **Larger
   context**.
 - **If the model keeps reading again what was removed** (three such calls in one turn), Local Fox asks whether to

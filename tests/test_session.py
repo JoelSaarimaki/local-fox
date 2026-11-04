@@ -545,3 +545,32 @@ def test_a_named_file_goes_last_and_the_feed_says_so(tmp_path):
     assert calls[0].removed  # The first read of a.py: out of date, so first, although a.py is named
     notices = [e.text for e in session.entries if e.kind == c.NOTICE]
     assert any("this included the latest read of" in text and "which you named" in text for text in notices)
+
+def run_reads(tmp_path, num_ctx, names="abcdef"):
+    read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], num_ctx=num_ctx, auto_approve_tools=["read_file_with_metadata"])
+    session.client = CountingClient([read(f"{n}.py") for n in names] + [[chunk("Done.", done=True)]])
+    big_reads(session, mcp)
+    asyncio.run(session.send("Read the files"))
+    return session
+
+def test_the_model_is_told_when_the_context_is_filling(tmp_path):
+    session = run_reads(tmp_path, 8750)
+    noted = [e for e in session.entries if e.kind == c.TOOL and "[Local Fox: " in e.response]
+    assert len(noted) == 1 and not any(e.removed for e in session.entries)  # Once per fill, before room is needed
+    assert "Read only what you still need: first write down what you have found" in noted[0].response
+    assert tool_messages(session)[-1] == noted[0].response  # The model gets what the feed shows
+    assert '"context_note"' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
+
+def test_the_model_is_told_when_room_was_made(tmp_path):
+    # One step can fill the rest of the context at once: making room tells the model too
+    session = run_reads(tmp_path, 8250)
+    full = [e for e in session.entries if e.kind == c.TOOL and "the context was full, so the responses of" in e.response]
+    assert full and any(e.removed for e in session.entries)
+    assert not full[-1].removed  # On the newest response, which the model reads next
+
+def test_a_users_message_never_gets_a_note(tmp_path):
+    session, _, _ = make_session(tmp_path, [])
+    session.messages.append({"role": "user", "content": "Explain a.py"})
+    session._note_to_model("\n\n[Local Fox: a note]")
+    assert session.messages[-1] == {"role": "user", "content": "Explain a.py"}

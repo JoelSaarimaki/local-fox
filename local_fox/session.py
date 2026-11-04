@@ -39,6 +39,16 @@ ROOM_TARGET = 0.75
 # The re-reads of removed responses in one turn after which the user is asked whether to go on: the model reading
 # again what was removed for room, which fills the context and removes the next, is a loop without progress.
 REREADS_TO_ASK = 3
+# The share of the context's budget at which the model is told that the context is filling, once per fill: above
+# ROOM_TARGET, so that the warning comes again only after room was made and the conversation grew back. A model that
+# keeps reading until the context is full then has its findings only in responses about to be removed. One step can
+# add more than the rest of the room (several whole files), so making room tells the model too (ROOM_MADE_NOTE).
+WARN_AT = 0.85
+CONTEXT_WARNING = ("\n\n[Local Fox: this conversation now uses about {used} of the {budget} tokens the context allows. "
+                   "Read only what you still need: first write down what you have found, in your plan, your change or "
+                   "your answer, as older tool responses will soon be removed to make room.]")
+ROOM_MADE_NOTE = ("\n\n[Local Fox: the context was full, so the responses of {count} older tool calls were replaced with "
+                  "notes. Write down what you have found, in your plan, your change or your answer, before reading more.]")
 CUT_OFF_MARK = "\n\n[This reply was cut off here: the context was full.]"
 # The parts of the feed of which the latest is kept open
 TOOL_CALL, THINKING, ANSWER = "tool call", "thinking", "answer"
@@ -115,6 +125,7 @@ class Session:
         self._request_chars = 0
         self._made_room = False
         self._rereads = 0  # Calls in this turn of tools whose responses were removed to make room (_ask_about_rereads)
+        self._warned = False  # Whether the model was told that the context is filling, since room was last made
         self._cut_by_ollama = False
 
     # --- Entries ---
@@ -265,6 +276,7 @@ class Session:
         """
         self.entries, self.messages = [], []
         self._latest = {}
+        self._warned = False
         self._last_prompt_tokens = 0
         self.saved_path, self._created = None, None
         self.allow_all = False
@@ -647,7 +659,11 @@ class Session:
         """
         budget = self.num_ctx - max(2048, self.num_ctx // 8)
         if self._estimate() <= budget:
+            if self._estimate() > budget * WARN_AT and not self._warned:
+                self._note_to_model(CONTEXT_WARNING.format(used=format_number(self._estimate()), budget=format_number(budget)))
+                self._warned = True
             return True
+        self._warned = False  # Room is made below: the next fill gets a warning of its own
         room_goal = int(budget * ROOM_TARGET)
         tool_indexes = [i for i, m in enumerate(self.messages) if m.get("role") == "tool"]
         last_reply = max((i for i, m in enumerate(self.messages) if m.get("role") == "assistant"), default=-1)
@@ -695,6 +711,7 @@ class Session:
                 break
         if removed:
             self._made_room = True
+            self._note_to_model(ROOM_MADE_NOTE.format(count=len(removed)))
             self.log.write("made_room", removed=removed, tokens=tokens, estimate=self._estimate(), budget=budget,
                            named_removed=named_removed)
             named_note = (f" Nothing else was left to remove, so this included the latest read of {', '.join(named_removed)}, "
@@ -705,6 +722,23 @@ class Session:
             self.used_tokens = self._estimate()
             self.frontend.status()
         return self._estimate() <= budget
+
+    def _note_to_model(self, note: str) -> None:
+        """
+        Tells the model about its context (filling, or room made) at the end of the newest tool response, which it
+        reads next: to write down what it has found before reading more, in any mode and with any model, as older
+        responses are or will be removed. The note is in the response the feed shows, and in the log. A message of the
+        user is never changed: when the newest message is theirs, the model gets no note.
+        """
+        if not self.messages or self.messages[-1].get("role") != "tool":
+            return
+        tool_entries = [e for e in self.entries if e.kind == c.TOOL]
+        tool_messages = [m for m in self.messages if m.get("role") == "tool"]
+        self.messages[-1] = {**self.messages[-1], "content": self.messages[-1]["content"] + note}
+        if len(tool_entries) == len(tool_messages):  # The k-th tool message answers the k-th tool entry
+            tool_entries[-1].response += note
+            self._update(tool_entries[-1])
+        self.log.write("context_note", note=note.strip(), estimate=self._estimate(), tool=tool_entries[-1].tool if tool_entries else None)
 
     async def _refuse_calls(self, calls: list) -> None:
         """
