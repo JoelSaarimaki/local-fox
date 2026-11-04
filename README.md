@@ -220,14 +220,21 @@ model goes on without knowing its task. Local Fox keeps that from happening:
 - **Before every request**, it estimates the request's size (calibrated with Ollama's own counts) and leaves room
   for the reply. If the request would not fit, the responses of earlier tool calls are replaced with a short
   note ("Removed by Local Fox to make room in the context: the response of
-  read_file_with_metadata(path='src/app.py'), about 5 900 tokens. To see it again, call
-  read_file_with_metadata(path='src/app.py').") until it fits. Out-of-date reads go first: a part of a file the
+  read_file_with_metadata(path='src/app.py'), about 5 900 tokens. Read it again only if you need its exact text,
+  and then only the section you need: read_file_with_metadata(path='src/app.py', section=...).") until the request
+  takes three quarters of the room. Making room seldom, with a margin, matters for speed: every removal changes
+  the start of the conversation, and Ollama then processes all of it again, which took two to three minutes per
+  request for 55 000 tokens on a laptop's CPU. Out-of-date reads go first: a part of a file the
   model read again later (or the whole file), text it then edited, or a file it rewrote, moved or deleted. An edit
   elsewhere in the file leaves a read in place. Then the oldest responses go. Your messages, the
   model's replies and the latest step's tool responses always stay, so the model keeps its task and can read a
   file again. The feed says so, and marks those tool calls "(response removed from the model's context)".
 - **If it still does not fit**, the request is not sent, and the feed offers **Clear**, **Export** and **Larger
   context**.
+- **If the model keeps reading again what was removed** (three such calls in one turn), Local Fox asks whether to
+  go on, with **Continue**, **Larger context** and **Stop**: the context is then too small for how the model works on
+  the task, and each read fills it again and removes the next response. In one run, flint:40b spent 19 minutes this
+  way without reading anything new.
 - **If Ollama cuts the conversation anyway** (its count of a request drops although nothing was removed), the turn
   stops and the feed says so.
 - **New projects limit a tool response** to 16 000 characters (`max_output_chars` in the tools config, about 4 000

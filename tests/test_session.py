@@ -385,7 +385,9 @@ def test_old_tool_responses_make_room_instead_of_the_request_being_dropped(tmp_p
     assert session.messages[1] == {"role": "user", "content": "Read the three files"}  # The request stays
     tool_texts = tool_messages(session)
     assert tool_texts[0].startswith("[Removed by Local Fox to make room in the context: the response of read_file_with_metadata(path='a.py')")
-    assert "To see it again, call read_file_with_metadata(path='a.py')." in tool_texts[0]  # The exact call to repeat
+    # The call to repeat, asked for only if needed, and only the section of a whole file
+    assert ("Read it again only if you need its exact text, and then only the section you need: "
+            "read_file_with_metadata(path='a.py', section=...)." in tool_texts[0])
     assert tool_texts[-1].startswith("c.py: xxx")  # The latest step's response stays
     calls = [e for e in session.entries if e.kind == c.TOOL]
     assert calls[0].removed and not calls[-1].removed
@@ -393,15 +395,63 @@ def test_old_tool_responses_make_room_instead_of_the_request_being_dropped(tmp_p
     assert session.entries[-1].kind == c.ASSISTANT and session.entries[-1].text == "Done."
     assert not any(e.kind == c.ERROR for e in session.entries)
 
+def test_room_is_made_down_to_a_share_of_the_budget(tmp_path):
+    # Every removal makes Ollama process the whole prompt again, so room is made seldom, with a margin
+    from local_fox.session import ROOM_TARGET
+    read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], num_ctx=6000, auto_approve_tools=["read_file_with_metadata"])
+    session.client = CountingClient([read(f"{n}.py") for n in "abcde"] + [[chunk("Done.", done=True)]])
+    big_reads(session, mcp)
+    budget = session.num_ctx - max(2048, session.num_ctx // 8)
+    estimates = []
+    real_fit = session._fit_context
+
+    def fit():
+        made = real_fit()
+        if session._made_room:
+            estimates.append(session._estimate())
+        return made
+    session._fit_context = fit
+    asyncio.run(session.send("Read the files"))
+    assert estimates and all(estimate <= budget * ROOM_TARGET for estimate in estimates)
+
+def test_reading_removed_responses_again_asks_the_user(tmp_path):
+    reads = lambda *paths: [chunk(tool_calls=[call("read_file_with_metadata", {"path": p}) for p in paths], done=True)]
+    session, _, mcp = make_session(tmp_path, [], choices=["Stop"], auto_approve_tools=["read_file_with_metadata"])
+    session.client = CountingClient([reads("a.py", "b.py", "c.py"), [chunk("Read.", done=True)],
+                                     reads("a.py", "./b.py"), reads("c.py"), [chunk("Done.", done=True)]])
+    asyncio.run(session.send("Read the files"))
+    for entry in session.entries:
+        if entry.kind == c.TOOL:
+            entry.removed = True  # As if room had been made for them
+    asyncio.run(session.send("Go on"))
+    assert len(session.frontend.questions) == 1 and "called 3 tools again" in session.frontend.questions[0]
+    assert session.entries[-1].kind == c.NOTICE and session.entries[-1].text == "Stopped."  # "Stop" ended the turn
+    assert not any(e.kind == c.ASSISTANT and e.text == "Done." for e in session.entries)
+
+def test_reading_other_parts_is_not_a_re_read(tmp_path):
+    reads = lambda *calls_: [chunk(tool_calls=[call("read_file_with_metadata", a) for a in calls_], done=True)]
+    session, _, _ = make_session(tmp_path, [], auto_approve_tools=["read_file_with_metadata"])
+    session.client = CountingClient([reads({"path": "a.py"}), [chunk("Read.", done=True)],
+                                     reads({"path": "a.py", "section": "f"}, {"path": "a.py", "section": "g"},
+                                           {"path": "a.py", "start_line": 1, "end_line": 5}), [chunk("Done.", done=True)]])
+    asyncio.run(session.send("Read"))
+    next(e for e in session.entries if e.kind == c.TOOL).removed = True
+    asyncio.run(session.send("Go on"))
+    assert session.frontend.questions == [] and session.entries[-1].text == "Done."  # The sections it was asked for
+
 def test_out_of_date_reads_make_room_first(tmp_path):
     read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
     session, _, mcp = make_session(tmp_path, [], num_ctx=5800, auto_approve_tools=["read_file_with_metadata"])
     session.client = CountingClient([read("b.py"), read("a.py"), read("a.py"), read("c.py"), [chunk("Done.", done=True)]])
     big_reads(session, mcp)
     asyncio.run(session.send("Read the files"))
+    import json
     calls = [e for e in session.entries if e.kind == c.TOOL]
     assert calls[1].removed  # The first read of a.py, which the second read made out of date, went first
-    assert not calls[0].removed  # b.py, although older, is still needed: there was room after the stale read went
+    made_room = [json.loads(line) for line in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8").splitlines()
+                 if '"made_room"' in line][0]
+    assert made_room["removed"][0] == "read_file_with_metadata a.py"  # Before b.py, although b.py is older
     assert "A later call read or changed the same file" in tool_messages(session)[1]
 
 def tool(name, args, response="", status=c.OK):

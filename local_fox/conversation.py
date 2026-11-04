@@ -126,6 +126,14 @@ def superseded(tool_entries: list[Entry]) -> set[int]:
             result.add(k)
     return result
 
+def same_call(a: Entry, b: Entry) -> bool:
+    """
+    Checks if two tool calls are the same call: the same tool with the same arguments, the path in one spelling.
+    """
+    if (a.resolved or a.tool) != (b.resolved or b.tool) or not isinstance(a.args, dict) or not isinstance(b.args, dict):
+        return False
+    return {**a.args, "path": _path(a.args)} == {**b.args, "path": _path(b.args)}
+
 def call_text(name: str, args) -> str:
     """
     Returns a tool call as the model can repeat it, read_file_with_metadata(path='cart.py', section='Cart.total'),

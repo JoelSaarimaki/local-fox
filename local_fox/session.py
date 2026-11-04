@@ -18,7 +18,7 @@ from . import conversation as c
 from . import saved_conversations as saved
 from . import tools_setup
 from .config import data_dir, without_secrets
-from .conversation import Entry, call_text, estimate_tokens, format_number, main_argument, superseded
+from .conversation import Entry, call_text, estimate_tokens, format_number, main_argument, same_call, superseded
 from .filemap import Rules, instructions_path, model_filemap, tools_config_path
 from .mcp_servers import Servers
 from .ollama_errors import explain, explain_connection
@@ -32,6 +32,13 @@ STOPPED_BEFORE = "The user stopped the session before this call ran."
 # Added to a reply that did not end on its own, in the feed and in the history the model gets, so that neither
 # the user nor the model takes it as finished
 STOPPED_MARK = "\n\n[The user stopped this reply here.]"
+# Making room brings the request down to this share of the context's budget, not just under it: every removal changes
+# the start of the conversation, and Ollama then processes the whole prompt again, about 55 000 tokens taking two to
+# three minutes on a laptop's CPU. Removing a little before every step made every step that slow.
+ROOM_TARGET = 0.75
+# The re-reads of removed responses in one turn after which the user is asked whether to go on: the model reading
+# again what was removed for room, which fills the context and removes the next, is a loop without progress.
+REREADS_TO_ASK = 3
 CUT_OFF_MARK = "\n\n[This reply was cut off here: the context was full.]"
 # The parts of the feed of which the latest is kept open
 TOOL_CALL, THINKING, ANSWER = "tool call", "thinking", "answer"
@@ -107,6 +114,7 @@ class Session:
         self._last_prompt_tokens = 0
         self._request_chars = 0
         self._made_room = False
+        self._rereads = 0  # Calls in this turn of tools whose responses were removed to make room (_ask_about_rereads)
         self._cut_by_ollama = False
 
     # --- Entries ---
@@ -532,6 +540,7 @@ class Session:
 
     async def _turn(self) -> None:
         steps = 0
+        self._rereads = 0
         while True:
             limit = self.config.get("max_steps")
             if limit and steps >= limit:
@@ -567,6 +576,28 @@ class Session:
                     self.notice("The model ended its turn without a reply or a tool call.")
                 return
             await self._run_calls(calls)
+            await self._ask_about_rereads()
+
+    async def _ask_about_rereads(self) -> None:
+        """
+        Asks the user whether to go on when the model has called again, REREADS_TO_ASK times in this turn, tools
+        whose responses were removed to make room: each re-read fills the context, which removes the next response,
+        and every removal makes the next request slow. Local Fox decides nothing itself; the user can continue, make
+        the context larger, or stop.
+        """
+        if self._rereads < REREADS_TO_ASK:
+            return
+        count, self._rereads = self._rereads, 0
+        choice = await self._decide(
+            f"The model has called {count} tools again whose responses were removed to make room in the context of "
+            f"{format_number(self.num_ctx)} tokens. The context is too small for how it works on this task, and each "
+            "removal makes the next request slower, as Ollama processes the whole conversation again. Continue?",
+            ["Continue", "Larger context", "Stop"], None)
+        if choice == "Stop":
+            raise StopTurn()
+        if choice == "Larger context":
+            error = self.larger_context()
+            self.notice(error or f"The context size is {format_number(self.num_ctx)} tokens for this session.")
 
     # --- Fitting the context ---
 
@@ -606,15 +637,17 @@ class Session:
         Makes the next request fit in the context, leaving room for the reply, before it is sent: if it would not
         fit, the responses of earlier tool calls are replaced with a short note until it does. Out-of-date reads go
         first (a file read again or changed later, see `superseded`), then the oldest responses. The note gives the
-        exact call that gets the content back. The responses of the latest step stay, as do all messages of the user
-        and the model, so the model keeps its task. The replaced calls are marked in the feed. Returns False if the
-        request does not fit even then. Without this, Ollama would drop the oldest messages, the user's request first.
+        call that gets the content back, but asks the model to call it only if it needs the exact text, and for a whole
+        file to read only the section it needs. Room is made down to ROOM_TARGET of the budget, so that it is made
+        seldom. The responses of the latest step stay, as do all messages of the user and the model, so the model keeps
+        its task. The replaced calls are marked in the feed. Returns False if the request does not fit even then. Without this, Ollama would drop the oldest messages, the user's request first.
         The order is decided from the calls alone, not by asking the model what it still needs: the small models
         judge that poorly, and a tool for it would add to the definitions sent with every request.
         """
         budget = self.num_ctx - max(2048, self.num_ctx // 8)
         if self._estimate() <= budget:
             return True
+        room_goal = int(budget * ROOM_TARGET)
         tool_indexes = [i for i, m in enumerate(self.messages) if m.get("role") == "tool"]
         last_reply = max((i for i, m in enumerate(self.messages) if m.get("role") == "assistant"), default=-1)
         tool_entries = [e for e in self.entries if e.kind == c.TOOL]  # One response message per tool call, in order
@@ -635,7 +668,15 @@ class Session:
             target = main_argument(entry.args) if entry else ""
             again = call_text(name, entry.args) if entry else ""
             why = (" A later call read or changed the same file, so this content was out of date." if k in stale else "")
-            how = f" To see it again, call {again}." if again else " Call the tool again if you need it."
+            whole_file = (entry and (entry.resolved or entry.tool) == "read_file_with_metadata" and isinstance(entry.args, dict)
+                          and not any(entry.args.get(key) for key in ("section", "start_line", "end_line")))
+            if whole_file and again:
+                how = (f" Read it again only if you need its exact text, and then only the section you need: "
+                       f"{again[:-1]}, section=...).")
+            elif again:
+                how = f" Call {again} again only if you need its exact content."
+            else:
+                how = " Call the tool again only if you need its exact content."
             self.messages[i] = {k2: v for k2, v in message.items() if k2 != "images"} | {"content": (
                 f"[Removed by Local Fox to make room in the context: the response of {again or (name + (' ' + target if target else ''))}, "
                 f"about {format_number(size)} tokens.{why}{how}]")}
@@ -644,7 +685,7 @@ class Session:
                 self._update(entry)
             removed.append(f"{name} {target}".strip())
             tokens += size
-            if self._estimate() <= budget:
+            if self._estimate() <= room_goal:
                 break
         if removed:
             self._made_room = True
@@ -789,6 +830,7 @@ class Session:
             entry.collapsed = False
 
     async def _run_calls(self, calls: list) -> None:
+        removed = [e for e in self.entries if e.kind == c.TOOL and e.removed]
         entries = [self.add(Entry(c.TOOL, tool=call.function.name, args=call.function.arguments, status=c.WAITING))
                    for call in calls]
         for i, entry in enumerate(entries):
@@ -796,6 +838,8 @@ class Session:
                 self._open_latest(TOOL_CALL, entry)  # Open while it is asked for and runs, and after, until the next
                 self._update(entry)
                 await self._run_call(entry)
+                if any(same_call(entry, earlier) for earlier in removed):
+                    self._rereads += 1  # Its name is resolved now, so a prefixed name counts too
             except (asyncio.CancelledError, StopTurn):
                 # Every call gets a response, also those the user stopped
                 for later in entries[i:]:
