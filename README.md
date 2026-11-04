@@ -4,6 +4,8 @@ A harness for local AI models run with Ollama (`flint:40b` by default, or e.g. `
 [ollmcp-generic-tools](../ollmcp-generic-tools). It replaces ollmcp; what it does differently is in "How a session
 goes to the model" below.
 
+![The Local Fox window: the project's files on the left, and on the right the conversation with flint:40b fixing a bug, with its tool calls, thinking and answer](docs/window.png)
+
 ## Running it
 
 Local Fox needs Ollama running with a model pulled. The tools of ollmcp-generic-tools are bundled: no Python with
@@ -19,6 +21,8 @@ the tools installed is needed.
 ### Choosing the project
 
 Local Fox starts by asking for the project, before the window opens:
+
+![The start dialog: the fox logo, the name and version, the recent projects, and the "Quit", "Open config folder", "Choose folder" and "Open" buttons](docs/start-dialog.png)
 
 - **The start dialog** shows the name and version, and lists the recent projects (missing folders dimmed; right-click to remove one from the list)
   and has **Choose folder** (next to **Open**), **Quit**, and **Open config folder** (the folder of `config.json`). Nothing is selected at first and Enter does nothing: a project opens with **Open**
