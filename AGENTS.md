@@ -59,7 +59,8 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   replaced with a note if the request would not fit (the user's and model's messages and the latest step's
   responses never), out-of-date reads first (`conversation.superseded`: the same part read again, the whole file read later, an
   edit of text the read showed, or any other change of the file), then the
-  oldest; the note gives the call to repeat (`call_text`), but only if the model needs the exact text, and for a
+  oldest, and last the latest current read of each file the user named in their messages (`conversation.named_reads`,
+  `mentioned`): kept longest, never protected for good, as named files could fill the context and stop the turn; the note gives the call to repeat (`call_text`), but only if the model needs the exact text, and for a
   whole file only the section it needs, as an invitation to re-read made flint read back each removed file. Room is
   made down to `ROOM_TARGET` (three quarters) of the budget: every removal makes Ollama process the whole prompt again
   (2 to 3 minutes for 55 000 tokens on the CPU), so it must be seldom. After `REREADS_TO_ASK` calls in one turn

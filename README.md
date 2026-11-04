@@ -226,7 +226,9 @@ model goes on without knowing its task. Local Fox keeps that from happening:
   the start of the conversation, and Ollama then processes all of it again, which took two to three minutes per
   request for 55 000 tokens on a laptop's CPU. Out-of-date reads go first: a part of a file the
   model read again later (or the whole file), text it then edited, or a file it rewrote, moved or deleted. An edit
-  elsewhere in the file leaves a read in place. Then the oldest responses go. Your messages, the
+  elsewhere in the file leaves a read in place. Then the oldest responses go, and last the latest read of each
+  file you named in your messages (by its path in the project or its full path, as "Add path to prompt" writes
+  it): you named them for the model to know. If even those have to go, the feed says so. Your messages, the
   model's replies and the latest step's tool responses always stay, so the model keeps its task and can read a
   file again. The feed says so, and marks those tool calls "(response removed from the model's context)".
 - **If it still does not fit**, the request is not sent, and the feed offers **Clear**, **Export** and **Larger

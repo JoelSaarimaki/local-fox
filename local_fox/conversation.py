@@ -5,6 +5,7 @@ model is kept separately in Session.messages, and every part of it has an entry.
 import re
 from dataclasses import dataclass, field
 from itertools import count
+from pathlib import Path
 
 _ids = count(1)
 
@@ -125,6 +126,38 @@ def superseded(tool_entries: list[Entry]) -> set[int]:
         if name in READING_TOOLS and path and any(_out_of_date(entry, name, path, later) for later in tool_entries[k + 1:]):
             result.add(k)
     return result
+
+def mentioned(path: str, texts: list[str], project: Path) -> bool:
+    """
+    Checks if the user's messages name a file: by its path relative to the project (also with ./ or backslashes), or
+    by its full path, as "Add path to prompt" writes them. A path inside a longer one does not count: app.py is not
+    named by src/app.py or my_app.py.
+    """
+    root = Path(project).resolve()
+    if Path(path).is_absolute():  # A model may read by the full path
+        try:
+            path = Path(path).resolve().relative_to(root).as_posix()
+        except ValueError:
+            return False  # Outside the project: a read-only file elsewhere, named only by its full path
+    forms = [path, f"{root.as_posix()}/{path}"]
+    for text in texts:
+        text = re.sub(r"(?<![\w.])\./", "", text.replace("\\", "/"))
+        if any(re.search(rf"(?<![\w./-]){re.escape(form)}(?![\w/-])", text, re.IGNORECASE) for form in forms):
+            return True
+    return False
+
+def named_reads(tool_entries: list[Entry], user_texts: list[str], project: Path, stale: set[int]) -> set[int]:
+    """
+    Returns the positions of the reads to keep longest when the context must make room: for each file the user named
+    in their messages, its latest read that is not out of date. The user named those files for the model to know;
+    earlier and out-of-date reads of them still go first.
+    """
+    latest: dict[str, int] = {}
+    for k, entry in enumerate(tool_entries):
+        path = _path(entry.args)
+        if (entry.resolved or entry.tool) in READING_TOOLS and path and entry.status == OK and k not in stale:
+            latest[path] = k
+    return {k for path, k in latest.items() if mentioned(path, user_texts, project)}
 
 def same_call(a: Entry, b: Entry) -> bool:
     """

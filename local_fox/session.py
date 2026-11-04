@@ -18,7 +18,7 @@ from . import conversation as c
 from . import saved_conversations as saved
 from . import tools_setup
 from .config import data_dir, without_secrets
-from .conversation import Entry, call_text, estimate_tokens, format_number, main_argument, same_call, superseded
+from .conversation import Entry, call_text, estimate_tokens, format_number, main_argument, named_reads, same_call, superseded
 from .filemap import Rules, instructions_path, model_filemap, tools_config_path
 from .mcp_servers import Servers
 from .ollama_errors import explain, explain_connection
@@ -636,7 +636,8 @@ class Session:
         """
         Makes the next request fit in the context, leaving room for the reply, before it is sent: if it would not
         fit, the responses of earlier tool calls are replaced with a short note until it does. Out-of-date reads go
-        first (a file read again or changed later, see `superseded`), then the oldest responses. The note gives the
+        first (a file read again or changed later, see `superseded`), then the oldest responses, and last the latest
+        reads of the files the user named in their messages (`named_reads`). The note gives the
         call that gets the content back, but asks the model to call it only if it needs the exact text, and for a whole
         file to read only the section it needs. Room is made down to ROOM_TARGET of the budget, so that it is made
         seldom. The responses of the latest step stay, as do all messages of the user and the model, so the model keeps
@@ -653,10 +654,13 @@ class Session:
         tool_entries = [e for e in self.entries if e.kind == c.TOOL]  # One response message per tool call, in order
         matched = len(tool_entries) == len(tool_indexes)
         stale = superseded(tool_entries) if matched else set()
-        # The responses before the latest step, out-of-date reads first, then the rest; each group oldest first
+        user_texts = [m.get("content") or "" for m in self.messages if m.get("role") == "user"]
+        named = named_reads(tool_entries, user_texts, self.project, stale) if matched else set()
+        # The responses before the latest step: out-of-date reads first, then the rest, and last the files the user
+        # named; each group oldest first
         candidates = [k for k, i in enumerate(tool_indexes) if i <= last_reply]
-        candidates.sort(key=lambda k: (k not in stale, k))
-        removed, tokens = [], 0
+        candidates.sort(key=lambda k: (0 if k in stale else 2 if k in named else 1, k))
+        removed, tokens, named_removed = [], 0, []
         for k in candidates:
             i = tool_indexes[k]
             message = self.messages[i]
@@ -684,15 +688,20 @@ class Session:
                 entry.removed = True
                 self._update(entry)
             removed.append(f"{name} {target}".strip())
+            if k in named:
+                named_removed.append(target)
             tokens += size
             if self._estimate() <= room_goal:
                 break
         if removed:
             self._made_room = True
-            self.log.write("made_room", removed=removed, tokens=tokens, estimate=self._estimate(), budget=budget)
+            self.log.write("made_room", removed=removed, tokens=tokens, estimate=self._estimate(), budget=budget,
+                           named_removed=named_removed)
+            named_note = (f" Nothing else was left to remove, so this included the latest read of {', '.join(named_removed)}, "
+                          "which you named: the context is small for this task." if named_removed else "")
             self.notice(f"To fit the context, the responses of {len(removed)} earlier tool call{'s' if len(removed) > 1 else ''} "
                         f"(about {format_number(tokens)} tokens) were replaced with a note for the model, which can call them "
-                        "again. They are marked in the feed.")
+                        f"again. They are marked in the feed.{named_note}")
             self.used_tokens = self._estimate()
             self.frontend.status()
         return self._estimate() <= budget

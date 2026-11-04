@@ -515,3 +515,33 @@ def test_a_request_that_cannot_fit_is_not_sent(tmp_path):
     asyncio.run(session.send("x" * 20000))
     assert session.client.requests == []
     assert any(e.kind == c.ERROR and "no longer fits in the context" in e.text for e in session.entries)
+
+def test_a_named_file_is_recognized(tmp_path):
+    texts = ["Fix the bug in src/app.py.", r"See C:\x\notes.md", "and ./lib/util.py"]
+    assert c.mentioned("src/app.py", texts, tmp_path)
+    assert c.mentioned("lib/util.py", texts, tmp_path)
+    assert c.mentioned("src/app.py", [f"Read {tmp_path.resolve().as_posix()}/src/app.py"], tmp_path)  # The full path
+    assert c.mentioned(str(tmp_path / "src" / "app.py"), texts, tmp_path)  # A read by the full path
+    assert not c.mentioned("app.py", texts, tmp_path)  # Only src/app.py was named
+    assert not c.mentioned("src/app.py", ["Fix src/my_app.py and src/app.pyx"], tmp_path)
+
+def test_files_the_user_named_are_kept_longest(tmp_path):
+    read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], num_ctx=5800, auto_approve_tools=["read_file_with_metadata"])
+    session.client = CountingClient([read("a.py"), read("b.py"), read("c.py"), read("d.py"), [chunk("Done.", done=True)]])
+    big_reads(session, mcp)
+    asyncio.run(session.send("Explain how a.py works"))
+    calls = {e.args["path"]: e for e in session.entries if e.kind == c.TOOL}
+    assert calls["b.py"].removed and not calls["a.py"].removed  # a.py is the oldest, but named
+    assert not any("which you named" in e.text for e in session.entries if e.kind == c.NOTICE)
+
+def test_a_named_file_goes_last_and_the_feed_says_so(tmp_path):
+    read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], num_ctx=4000, auto_approve_tools=["read_file_with_metadata"])
+    session.client = CountingClient([read("a.py"), read("b.py"), read("a.py"), read("c.py"), [chunk("Done.", done=True)]])
+    big_reads(session, mcp)
+    asyncio.run(session.send("Read a.py and b.py"))
+    calls = [e for e in session.entries if e.kind == c.TOOL]
+    assert calls[0].removed  # The first read of a.py: out of date, so first, although a.py is named
+    notices = [e.text for e in session.entries if e.kind == c.NOTICE]
+    assert any("this included the latest read of" in text and "which you named" in text for text in notices)
