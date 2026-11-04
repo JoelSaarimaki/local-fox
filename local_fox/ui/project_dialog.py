@@ -70,9 +70,9 @@ class ProjectDialog(_NoEnterDialog):
         header.addLayout(about, 1)
         layout.addLayout(header)
         layout.addSpacing(8)
-        intro = QLabel("Choose a project folder where you want the local AI to run in. Local Fox will generate .local-fox folder "
-                       "to the project folder if it doesn't exist already. The generated folder is used to store the "
-                       "project-specific configuration and instruction files.", objectName="dim")
+        intro = QLabel("Choose a project folder where you want the local AI to run in. Local Fox will generate .mcp.json and "
+                       ".local-fox folder to the project folder if they don't exist already. The generated folder is used to "
+                       "store the project-specific configuration and instruction files.", objectName="dim")
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
