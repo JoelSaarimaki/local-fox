@@ -23,6 +23,11 @@ from .theme import feed_css
 
 # The entries that are shown in a box when expanded
 BOXED = (c.TOOL, c.INSTRUCTIONS, c.FILEMAP, c.TOOLS)
+# How a frame looks (Feed._look): all but an empty one have the same geometry, so that nothing moves when one opens
+BOXED_LOOK, PLAIN_LOOK, EMPTY_LOOK = "boxed", "plain", "empty"
+# Around every entry: these space the entries, as the empty lines Qt keeps between frames are hidden
+FRAME_MARGIN = 1
+FRAME_PADDING = 6
 
 class Feed(QTextBrowser):
     toggled = Signal(int)
@@ -37,7 +42,7 @@ class Feed(QTextBrowser):
         self.anchorClicked.connect(self._clicked)
         self.entries: list[Entry] = []
         self._cache: dict[int, tuple[tuple, str]] = {}
-        self._frames: list[tuple[int, object, str, bool]] = []  # Entry id, its frame, the HTML written in it, boxed
+        self._frames: list[tuple[int, object, str, str]] = []  # Entry id, its frame, the HTML written in it, its look
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(80)
@@ -78,27 +83,52 @@ class Feed(QTextBrowser):
         return entry.kind in BOXED and not entry.collapsed
 
     @classmethod
-    def _frame_format(cls, entry: Entry) -> QTextFrameFormat:
+    def _look(cls, entry: Entry, html: str) -> str:
         """
-        Returns the format of an entry's frame: a box with a background and a border when it is an expanded
-        collapsible entry, else nothing visible.
+        Returns how an entry's frame looks: BOXED_LOOK for an expanded collapsible entry, EMPTY_LOOK for an entry
+        that shows nothing, else PLAIN_LOOK.
+        """
+        if not html:
+            return EMPTY_LOOK
+        return BOXED_LOOK if cls._boxed(entry) else PLAIN_LOOK
+
+    @staticmethod
+    def _frame_format(look: str) -> QTextFrameFormat:
+        """
+        Returns the format of a frame of the look. A boxed and a plain frame have the same margins, border and
+        padding, the plain one's border and background only not drawn, so that the heading of an entry stays in its
+        place when the entry is opened or closed (with a box only around an open entry, the heading jumped).
+        An empty frame takes no space.
         """
         fmt = QTextFrameFormat()
-        fmt.setTopMargin(1)
-        fmt.setBottomMargin(1)
-        if cls._boxed(entry):
-            fmt.setBackground(QBrush(QColor(theme.EXPANDED)))
-            fmt.setBorder(1)
-            fmt.setBorderBrush(QBrush(QColor(theme.BORDER)))
-            fmt.setBorderStyle(QTextFrameFormat.BorderStyle_Solid)
-            fmt.setPadding(6)
-            fmt.setTopMargin(4)
-            fmt.setBottomMargin(4)
-        else:
-            fmt.setBackground(QBrush(Qt.NoBrush))
+        if look == EMPTY_LOOK:
+            fmt.setMargin(0)
             fmt.setBorder(0)
             fmt.setPadding(0)
+            fmt.setBackground(QBrush(Qt.NoBrush))
+            return fmt
+        fmt.setMargin(0)
+        fmt.setTopMargin(FRAME_MARGIN)
+        fmt.setBottomMargin(FRAME_MARGIN)
+        fmt.setBorder(1)
+        fmt.setBorderStyle(QTextFrameFormat.BorderStyle_Solid)
+        fmt.setPadding(FRAME_PADDING)
+        if look == BOXED_LOOK:
+            fmt.setBackground(QBrush(QColor(theme.EXPANDED)))
+            fmt.setBorderBrush(QBrush(QColor(theme.BORDER)))
+        else:
+            fmt.setBackground(QBrush(Qt.NoBrush))
+            fmt.setBorderBrush(QBrush(Qt.NoBrush))
         return fmt
+
+    @staticmethod
+    def _hide(block) -> None:
+        """
+        Hides a block of the document and lays it out again.
+        """
+        if block.isValid() and block.isVisible():
+            block.setVisible(False)
+            block.document().markContentsDirty(block.position(), block.length())
 
     @staticmethod
     def _write(frame, html: str) -> None:
@@ -116,13 +146,11 @@ class Feed(QTextBrowser):
         cursor.setBlockFormat(QTextBlockFormat())
         cursor.setCharFormat(QTextCharFormat())
         # An entry that shows nothing (a reply with only tool calls) keeps its frame, as frames follow the entries,
-        # but its empty block and the empty line Qt keeps after every frame are hidden: shown, they left a blank space
-        # between the tool calls
-        document = frame.document()
-        for block in (cursor.block(), document.findBlock(frame.lastPosition() + 1)):
-            if block.isValid() and block.isVisible() != bool(html):
-                block.setVisible(bool(html))
-                document.markContentsDirty(block.position(), block.length())  # Laid out again
+        # but its empty block is hidden: shown, it left a blank space between the tool calls
+        block = cursor.block()
+        if block.isVisible() != bool(html):
+            block.setVisible(bool(html))
+            frame.document().markContentsDirty(block.position(), block.length())  # Laid out again
         if html:
             cursor.insertHtml(html)
 
@@ -147,13 +175,15 @@ class Feed(QTextBrowser):
             for i, entry in enumerate(entries):
                 html = self._html(entry)
                 if i < len(self._frames):
-                    entry_id, frame, written, boxed = self._frames[i]
+                    entry_id, frame, written, look = self._frames[i]
                     if html != written:
                         self._write(frame, html)
                     # The format only when it changes: setting it lays the document out again
-                    if self._boxed(entry) != boxed:
-                        frame.setFrameFormat(self._frame_format(entry))
-                    self._frames[i] = (entry_id, frame, html, self._boxed(entry))
+                    if self._look(entry, html) != look:
+                        frame.setFrameFormat(self._frame_format(self._look(entry, html)))
+                        # Else a frame that became empty kept its earlier height
+                        document.markContentsDirty(frame.firstPosition(), frame.lastPosition() - frame.firstPosition() + 1)
+                    self._frames[i] = (entry_id, frame, html, self._look(entry, html))
                 else:
                     self._append(cursor, entry, html)
             cursor.endEditBlock()
@@ -185,9 +215,12 @@ class Feed(QTextBrowser):
 
     def _append(self, cursor: QTextCursor, entry: Entry, html: str) -> None:
         cursor.movePosition(QTextCursor.End)
-        frame = cursor.insertFrame(self._frame_format(entry))
+        # Qt keeps an empty line between frames; hidden, as the frames' own margins and padding space the entries
+        self._hide(cursor.block())
+        frame = cursor.insertFrame(self._frame_format(self._look(entry, html)))
         self._write(frame, html)
-        self._frames.append((entry.id, frame, html, self._boxed(entry)))
+        self._hide(self.document().findBlock(frame.lastPosition() + 1))
+        self._frames.append((entry.id, frame, html, self._look(entry, html)))
 
     def _render_all(self, entries: list[Entry]) -> None:
         """

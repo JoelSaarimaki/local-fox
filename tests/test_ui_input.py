@@ -227,3 +227,14 @@ def test_a_reply_with_only_tool_calls_leaves_no_gap(app):
     feed.render()
     app.processEvents()
     assert "Now it has text." in feed.toPlainText() and height(feed) > height(plain) + 10
+
+def test_opening_an_entry_does_not_move_its_heading(app):
+    entry = c.Entry(c.TOOL, tool="read_file_with_metadata", args={"path": "a.py"}, response="x = 1", status=c.OK, collapsed=True)
+    feed = _feed(app, [c.Entry(c.USER, text="Read a.py"), entry, c.Entry(c.ASSISTANT, text="Done.")])
+    layout = feed.document().documentLayout()
+    heading = lambda: layout.blockBoundingRect(feed.document().findBlock(feed._frames[1][1].firstPosition())).topLeft()
+    closed = heading()
+    entry.collapsed = False
+    feed.render(follow=False)
+    app.processEvents()
+    assert heading() == closed and "x = 1" in feed.toPlainText()
