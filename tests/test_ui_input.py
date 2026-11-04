@@ -161,3 +161,24 @@ def test_context_sizes_double_up_to_the_models_maximum():
     assert context_sizes(50000, 131072) == [4096, 8192, 16384, 32768, 50000, 65536, 131072]  # A size set with /context stays
     assert context_sizes(32768, None)[-1] == 1_048_576  # The model's maximum not known
     assert context_sizes(8192, 40960)[-1] == 40960  # A maximum that is not a doubling step
+
+def test_closing_an_entry_leaves_no_list_formatting_behind(app):
+    # The instructions end with a Markdown list; written again closed, the frame must not keep a list item's format
+    entry = c.Entry(c.INSTRUCTIONS, title="Project instructions", text="# Rules\n\n- one\n- two", collapsed=True)
+    feed = _feed(app, [entry])
+    frame = feed._frames[0][1]
+
+    def blocks():
+        block, result = frame.firstCursorPosition().block(), []
+        while block.isValid() and block.position() <= frame.lastPosition():
+            result.append((block.text(), block.textList() is not None, block.blockFormat().indent()))
+            block = block.next()
+        return result
+
+    closed = blocks()
+    entry.collapsed = False
+    feed.render(follow=False)
+    assert any(in_list for _, in_list, _ in blocks())  # Open: the list is there
+    entry.collapsed = True
+    feed.render(follow=False)
+    assert blocks() == closed  # Closed again: the same as before it was opened

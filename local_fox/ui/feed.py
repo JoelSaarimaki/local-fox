@@ -12,7 +12,7 @@ the conversation when new content arrives and the user is at the end, but never 
 closed an entry: the view then stays where it is. Text is selected with the mouse and copied with Ctrl + C.
 """
 from PySide6.QtCore import QTimer, QUrl, Signal, Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QTextCursor, QTextDocument, QTextFrameFormat
+from PySide6.QtGui import QBrush, QColor, QFont, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument, QTextFrameFormat
 from PySide6.QtWidgets import QTextBrowser
 
 from .. import conversation as c
@@ -105,6 +105,13 @@ class Feed(QTextBrowser):
         cursor = frame.firstCursorPosition()
         cursor.setPosition(frame.lastPosition(), QTextCursor.KeepAnchor)
         cursor.removeSelectedText()
+        # Removing leaves one block, which keeps the old content's format: e.g. a list item's, when an opened entry
+        # ended with a list. The new HTML would start in it, and a closed entry would get a bullet and an indent.
+        text_list = cursor.currentList()
+        if text_list:
+            text_list.remove(cursor.block())
+        cursor.setBlockFormat(QTextBlockFormat())
+        cursor.setCharFormat(QTextCharFormat())
         cursor.insertHtml(html or "&nbsp;")
 
     def render(self, follow: bool = True) -> None:
