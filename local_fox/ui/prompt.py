@@ -5,14 +5,17 @@ messages sent earlier while the input is empty or shows a recalled message. Copy
 running) stays in the input.
 """
 import json
+import math
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeyEvent
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QFontMetricsF, QKeyEvent
 from PySide6.QtWidgets import QPlainTextEdit
 
 from ..config import data_dir
 
 HISTORY_SIZE = 200
+# The lines of text the input shows; a longer message scrolls. Five were too few for a message of several lines.
+PROMPT_LINES = 7
 
 class PromptInput(QPlainTextEdit):
     submitted = Signal(str)
@@ -24,6 +27,34 @@ class PromptInput(QPlainTextEdit):
         self.setTabChangesFocus(True)
         self.history: list[str] = self._load_history()
         self._position = len(self.history)  # The recalled message, len(history) for none
+        self._lines = PROMPT_LINES
+        self._fit_height()
+
+    def show_lines(self, lines: int = PROMPT_LINES) -> None:
+        """
+        Makes the input as high as the given number of lines in its font, so that it follows the font size.
+        """
+        self._lines = lines
+        self._fit_height()
+
+    def _fit_height(self) -> None:
+        # A line as the input lays it out: the font's line spacing rounded up (QFontMetrics rounds it down)
+        line = math.ceil(QFontMetricsF(self.font()).lineSpacing())
+        height = line * self._lines + 2 * self.document().documentMargin() + 2 * self.frameWidth()
+        self.setFixedHeight(int(height) + 2)  # A little room, so that the last line is not cut by rounding
+
+    def changeEvent(self, event) -> None:
+        """
+        Fits the height again when the font or the style changes: the window's stylesheet, which sets the border,
+        is applied after the input is created.
+        """
+        super().changeEvent(event)
+        if event.type() in (QEvent.FontChange, QEvent.StyleChange):
+            self._fit_height()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._fit_height()
 
     @staticmethod
     def _history_path():

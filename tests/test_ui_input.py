@@ -254,3 +254,17 @@ def test_selected_text_keeps_its_own_color(app):
     from local_fox.ui import theme
     theme.keep_selected_text_colors(app)
     assert app.palette().brush(QPalette.Active, QPalette.HighlightedText).style() == Qt.NoBrush
+
+def test_the_input_shows_seven_lines_at_any_font_size(app):
+    import math
+    from PySide6.QtGui import QFontMetricsF
+    from local_fox.ui.main_window import MainWindow
+    from local_fox.ui.prompt import PROMPT_LINES
+    for size in (10, 14):
+        window = MainWindow({**config.DEFAULTS, "font_size": size})
+        window.show()
+        app.processEvents()
+        prompt = window.prompt
+        line = math.ceil(QFontMetricsF(prompt.font()).lineSpacing())
+        assert (prompt.viewport().height() - 2 * prompt.document().documentMargin()) // line == PROMPT_LINES == 7
+        window.close()

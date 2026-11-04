@@ -153,7 +153,7 @@ class MainWindow(QMainWindow):
         # The prompt
         self.prompt = PromptInput()
         self.prompt.setFont(font)
-        self.prompt.setFixedHeight(96)
+        self.prompt.show_lines()  # PROMPT_LINES; fitted again when the stylesheet applies
         self.prompt.submitted.connect(self._on_prompt)
         self.prompt.escape.connect(self._stop)
         conversation = QWidget()
