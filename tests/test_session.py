@@ -75,6 +75,11 @@ def make_session(tmp_path: Path, replies, choices=(), **settings) -> tuple[Sessi
 def tool_messages(session):
     return [m["content"] for m in session.messages if m["role"] == "tool"]
 
+def test_the_api_key_is_not_logged(tmp_path):
+    make_session(tmp_path, [], ollama_api_key="secret-key")
+    log = (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
+    assert "secret-key" not in log and '"ollama_api_key": "(set)"' in log
+
 def test_start_gives_instructions_and_filemap(tmp_path):
     session, _, _ = make_session(tmp_path, [])
     system = session.messages[0]

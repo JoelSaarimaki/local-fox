@@ -21,7 +21,7 @@ from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from .tools_setup import server_command
+from .tools_setup import API_KEY_ENV_VAR, runs_the_tools, server_command
 
 @dataclass
 class ServerTool:
@@ -55,10 +55,11 @@ class Servers:
     client's task groups must be exited in the task that entered them; tools are called from any task.
     """
 
-    def __init__(self, project: Path, log_dir: Path, extra_env: dict | None = None, use_bundled: bool = True):
+    def __init__(self, project: Path, log_dir: Path, extra_env: dict | None = None, use_bundled: bool = True, api_key: str = ""):
         self.project = project
         self.log_dir = log_dir
         self.extra_env = extra_env or {}
+        self.api_key = (api_key or "").strip()
         self.use_bundled = use_bundled
         self.sources: dict[str, str] = {}  # Server key -> what it runs, for the feed
         self.sessions: dict[str, ClientSession] = {}
@@ -112,6 +113,10 @@ class Servers:
         log.write(f"--- {datetime.now().isoformat(timespec='seconds')} {self.project.as_posix()}: {self.sources[key]}\n")
         log.flush()
         env = {**os.environ, "PYTHONIOENCODING": "utf-8", **{k: str(v) for k, v in (spec.get("env") or {}).items()}, **self.extra_env}
+        # The Ollama API key of the settings goes only to the tools' server, which does not pass it on to the commands
+        # it runs; other servers of .mcp.json never get it. Empty, the tools use their user config file, if any.
+        if self.api_key and runs_the_tools(spec):
+            env[API_KEY_ENV_VAR] = self.api_key
         cwd = Path(spec["cwd"]) if spec.get("cwd") else self.project
         params = StdioServerParameters(command=command, args=args, env=env,
                                        cwd=str(cwd if cwd.is_absolute() else self.project / cwd))

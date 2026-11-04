@@ -51,6 +51,16 @@ def test_context_size_is_chosen_from_the_sizes_of_the_sessions_dialog(app):
     form = AppSettingsForm({**config.DEFAULTS, "model": "gemma4:26b", "num_ctx": 50000}, max_contexts={"flint:40b": 262144})
     assert form.values()["num_ctx"] == 50000 and form.fields["num_ctx"].itemData(form.fields["num_ctx"].count() - 1) == 1_048_576
 
+def test_the_api_key_is_a_secret(app):
+    from local_fox.ui.settings_view import AppSettingsForm
+    from PySide6.QtWidgets import QLineEdit
+    with pytest.raises(config.ConfigError, match="ollama_api_key"):
+        config.validate({"ollama_api_key": None})
+    assert config.without_secrets({"model": "m", "ollama_api_key": "secret"}) == {"model": "m", "ollama_api_key": "(set)"}
+    assert config.without_secrets({"ollama_api_key": ""})["ollama_api_key"] == ""
+    form = AppSettingsForm({**config.DEFAULTS, "ollama_api_key": "secret"})
+    assert form.fields["ollama_api_key"].echoMode() != QLineEdit.Normal and form.values()["ollama_api_key"] == "secret"
+
 def test_form_reports_wrong_numbers(app):
     from local_fox.ui.settings_view import AppSettingsForm, SettingsError
     form = AppSettingsForm(config.DEFAULTS)

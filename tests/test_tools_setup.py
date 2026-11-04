@@ -23,6 +23,33 @@ def test_other_servers_run_as_given():
     spec = {"command": "node", "args": ["server.js"]}
     assert tools_setup.server_command(spec, True)[:2] == ("node", ["server.js"])
 
+def server_env(monkeypatch, tmp_path, spec, api_key):
+    """Starts a server of .mcp.json as far as its process, and returns the environment it would get."""
+    import asyncio
+    from contextlib import AsyncExitStack
+    from local_fox import mcp_servers
+    seen = {}
+
+    def stdio_client(params, errlog=None):
+        seen["env"] = params.env
+        raise RuntimeError("not started")
+    monkeypatch.setattr(mcp_servers, "stdio_client", stdio_client)
+    servers = mcp_servers.Servers(tmp_path, tmp_path / "logs", api_key=api_key)
+
+    async def enter():
+        async with AsyncExitStack() as stack:
+            with pytest.raises(RuntimeError):
+                await servers._enter(stack, "x", spec)
+    asyncio.run(enter())
+    return seen["env"]
+
+def test_the_api_key_goes_only_to_the_tools_server(monkeypatch, tmp_path):
+    tools = {"command": "python", "args": ["-m", "ollmcp_tools"]}
+    other = {"command": "node", "args": ["server.js"]}
+    assert server_env(monkeypatch, tmp_path, tools, " key ")["MCP_TOOLS_OLLAMA_API_KEY"] == "key"
+    assert "MCP_TOOLS_OLLAMA_API_KEY" not in server_env(monkeypatch, tmp_path, other, "key")
+    assert "MCP_TOOLS_OLLAMA_API_KEY" not in server_env(monkeypatch, tmp_path, tools, "")  # The user config file, if any
+
 @pytest.fixture
 def home(tmp_path, monkeypatch):
     """The tools' user folder in tmp_path, so that the setup does not touch the real one."""
@@ -50,6 +77,8 @@ def test_set_up_creates_the_local_fox_folder(tmp_path, home):
     assert instructions_path(project) == project / ".local-fox" / "instructions.md"
     assert instructions == tools_setup.instructions_template() and "dev_" not in instructions
     assert "Created: .local-fox/instructions.md (Local Fox's template)" in report and "ollmcp's system prompt" not in report
+    # The API key is a setting of Local Fox: the tools' user config file is not created
+    assert not (home / "user-config.json").exists() and 'API key in "Settings"' in report
     # The saved conversations are forbidden to the tools, as the rest of the folder except the plans
     rules = Rules(project)
     assert rules.is_forbidden((project / ".local-fox" / "conversations" / "a.json").resolve())

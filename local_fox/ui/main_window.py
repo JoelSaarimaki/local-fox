@@ -571,13 +571,19 @@ class MainWindow(QMainWindow):
 
     def _settings_saved(self, settings: dict, clear: bool, tools_changed: bool) -> None:
         self.filemap.full_paths = settings.get("prompt_full_paths", False)
+        # The tools take the API key when they start, as they read their config
+        key_changed = settings.get("ollama_api_key", "") != self.settings.get("ollama_api_key", "")
         if tools_changed:
             self._wrote_tools_config()
         if clear and self.session:
-            self._clear(settings, restart_tools=tools_changed)
+            self._clear(settings, restart_tools=tools_changed or key_changed)
             return
         if tools_changed:
             self._tools_config_changed("The tools config was saved. The tools apply it when they restart.")
+        elif key_changed and self.session:
+            session = self.session
+            self.runner.call(lambda: session.notice("The Ollama API key was saved. The tools take it when they restart, "
+                                                    "which starts a new conversation.", [RESTART_TOOLS]))
         previous, self.settings = self.settings, dict(settings)
         if self.session and settings["model"] != self.session.model:
             self._switch_model(settings["model"])  # As the model menu does, so that a clear keeps it

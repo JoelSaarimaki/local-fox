@@ -13,6 +13,7 @@ from pathlib import Path
 
 DEFAULTS = {
     "ollama_host": "http://127.0.0.1:11434",
+    "ollama_api_key": "",
     # flint:40b is preferred: its calls by bare tool names, which ollmcp skips, run in Local Fox (see AGENTS.md)
     "model": "flint:40b",
     "num_ctx": 65536,
@@ -27,12 +28,17 @@ DEFAULTS = {
     "font_size": 10,
     "bundled_tools": True,
 }
+# Settings that are secrets: never written to the log or shown as they are (without_secrets)
+SECRETS = {"ollama_api_key"}
 # Settings of earlier versions, dropped when a file still has them instead of being unknown
 REMOVED = {"session_log", "session_log_days", "tool_calls_collapsed", "project_dir"}
 
 # What each setting does, shown in the settings view. Every setting of DEFAULTS has one.
 DESCRIPTIONS = {
     "ollama_host": "Where Ollama runs.",
+    "ollama_api_key": "Your Ollama API key, for the web tools (web search and fetch through ollama.com); empty: the web tools are "
+                      "not offered. Create one at ollama.com/settings/keys. It is given only to the tools' server, never to the "
+                      "model, and applies when the tools restart (\"Restart tools and clear\", or opening the project again).",
     "model": "The model, as Ollama names it. Also set by the model menu.",
     "num_ctx": "The context size in tokens, sent with every request. Ollama uses 4 096 tokens when none is sent. A larger "
                "context needs little memory with flint:40b, but moves more of the model from the GPU to the CPU.",
@@ -105,10 +111,19 @@ def validate(values: dict, where: str = "config.json") -> dict:
         raise ConfigError(f"{where}: 'filemap_max_tokens' must be a whole number of at least 1.")
     if not _whole(config["font_size"], 6):
         raise ConfigError(f"{where}: 'font_size' must be a whole number of at least 6.")
+    if not isinstance(config["ollama_api_key"], str):
+        raise ConfigError(f"{where}: 'ollama_api_key' must be a string; empty for none.")
     for key in ("ollama_host", "model"):
         if not isinstance(config[key], str) or not config[key].strip():
             raise ConfigError(f"{where}: '{key}' must be a non-empty string.")
     return config
+
+def without_secrets(settings: dict) -> dict:
+    """
+    Returns the settings with the secrets replaced by whether they are set, for the log: a key in the log could be
+    read by anyone the log is shown to, e.g. with an issue.
+    """
+    return {key: ("(set)" if value else "") if key in SECRETS else value for key, value in settings.items()}
 
 def load(path: Path | None = None) -> dict:
     """

@@ -116,6 +116,8 @@ class AppSettingsForm(QWidget):
             field.setCurrentText(str(value))
             return field
         field = QLineEdit()
+        if key in config_module.SECRETS:
+            field.setEchoMode(QLineEdit.PasswordEchoOnEdit)  # Hidden, except while it is typed or pasted
         if kind == "list":
             field.setText(", ".join(str(v) for v in value) if isinstance(value, list) else json.dumps(value))
             if key == "auto_approve_tools" and tools:

@@ -26,6 +26,9 @@ TOOLS_MODULE = "ollmcp_tools"
 SERVER_FLAG = "--tools-server"
 MAX_OUTPUT_CHARS = 16000  # The largest tool response in a new project, about 4 000 tokens
 CONVERSATIONS = "conversations"  # The saved conversations, in the project's Local Fox folder
+# How the tools take the Ollama API key from the client that starts them (ollmcp_tools.common reads a config on import,
+# so the name is repeated here). The tools give it to their web toolset and keep it from the commands they run.
+API_KEY_ENV_VAR = "MCP_TOOLS_OLLAMA_API_KEY"
 
 def frozen() -> bool:
     """
@@ -284,15 +287,11 @@ def set_up(project: Path) -> str:
     if not bundled_version():
         raise RuntimeError("This Local Fox was built without its tools (ollmcp-generic-tools). Build it again with "
                            "build.ps1, or install the tools into the environment it runs in.")
-    from ollmcp_tools.locations import USER_CONFIG_PATH, default_backup_folder
+    # The tools' user config file (~/.ollmcp-tools/user-config.json) is not created: the API key of the web tools
+    # is a setting of Local Fox, given to the tools' server when it starts
+    from ollmcp_tools.locations import default_backup_folder
     project = Path(project).resolve()
     folder, changed, created, skipped = _apply(project, write=True)
-    if USER_CONFIG_PATH.exists():
-        skipped.append(str(USER_CONFIG_PATH))
-    else:
-        USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        USER_CONFIG_PATH.write_text(json.dumps({"ollama_api_key": None}, indent=4) + "\n", encoding="utf-8")
-        created.append(str(USER_CONFIG_PATH))
 
     config_path = tools_config_path(project)
     try:
@@ -317,7 +316,7 @@ def set_up(project: Path) -> str:
               f"from {folder}/commands-examples.json (which nothing reads) and change them as needed.",
               f"3. {folder}/{INSTRUCTIONS_NAME}: adapt the instructions to the project, e.g. its documents at the end, and remove "
               "the tools you disable. Local Fox gives them to the model at the start of every session.",
-              f"4. Web search: add your Ollama API key to {USER_CONFIG_PATH}. Without one the web tools are not offered.",
+              "4. Web search: set your Ollama API key in \"Settings\" (ollama_api_key). Without one the web tools are not offered.",
               f"5. Commit .mcp.json and {folder}; its .gitignore leaves out each person's own files (plans, suggested "
               "commands, saved conversations). Others who clone the project set it up again to get those folders."]
     return "\n".join(lines)

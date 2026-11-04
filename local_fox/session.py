@@ -17,7 +17,7 @@ import ollama
 from . import conversation as c
 from . import saved_conversations as saved
 from . import tools_setup
-from .config import data_dir
+from .config import data_dir, without_secrets
 from .conversation import Entry, call_text, estimate_tokens, format_number, main_argument, superseded
 from .filemap import Rules, instructions_path, model_filemap, tools_config_path
 from .mcp_servers import Servers
@@ -138,7 +138,7 @@ class Session:
             raise NotSetUp(f"{self.project.as_posix()} is not set up as a project: it has no .local-fox folder with a tools config. "
                            "Set it up first (/setup in the window, --setup on the command line).")
         self.rules = Rules(self.project)
-        self.servers = Servers(self.project, self.log_dir, self.extra_env, self.config.get("bundled_tools", True))
+        self.servers = self._new_servers()
         self.tools_config_text = self.read_tools_config()
         await self.servers.start()
         await self.load_model_info()
@@ -152,10 +152,18 @@ class Session:
         await self.stop_and_wait()
         if self.servers:
             await self.servers.close()
-        self.servers = Servers(self.project, self.log_dir, self.extra_env, self.config.get("bundled_tools", True))
+        self.servers = self._new_servers()
         self.tools_config_text = self.read_tools_config()
         await self.servers.start()
         await self.new_conversation()
+
+    def _new_servers(self) -> Servers:
+        """
+        Returns the project's MCP servers, to be started, with the settings as they are now: whether the tools run
+        bundled, and the Ollama API key for the tools' web toolset.
+        """
+        return Servers(self.project, self.log_dir, self.extra_env, self.config.get("bundled_tools", True),
+                       api_key=self.config.get("ollama_api_key", ""))
 
     def read_tools_config(self) -> str | None:
         """
@@ -327,7 +335,7 @@ class Session:
         self._logged, self._logged_system = 0, None
         servers = {key: {"runs": self.servers.sources.get(key), "tools": sum(1 for t in self.servers.tools if t.server == key)}
                    for key in self.servers.sessions} if self.servers else {}
-        self.log.begin(project=str(self.project), model=self.model, num_ctx=self.num_ctx, settings=self.config, servers=servers,
+        self.log.begin(project=str(self.project), model=self.model, num_ctx=self.num_ctx, settings=without_secrets(self.config), servers=servers,
                        server_errors=list(self.servers.errors) if self.servers else [])
         if self.log.error:
             self.notice(self.log.error)
