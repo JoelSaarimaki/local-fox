@@ -36,6 +36,8 @@ def entry_markdown(entry: Entry) -> str:
             parts.append(entry.text)
         if entry.stop_reason == "stopped":
             parts.append("*(stopped by the user)*")
+        elif entry.stop_reason == c.REPEATING and not entry.text:
+            parts.append("*(stopped by Local Fox while thinking: it kept repeating the same lines)*")
         return "\n\n".join(parts)
     if entry.kind == c.TOOL:
         target = main_argument(entry.args)

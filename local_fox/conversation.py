@@ -29,7 +29,7 @@ class Entry:
     title: str = ""           # The one-line title of a collapsible entry
     thinking: str = ""        # The model's thinking, for an assistant entry
     streaming: bool = False   # Whether an assistant entry is still arriving
-    stop_reason: str = ""     # Why an assistant reply ended, as Ollama reports it ('stop', 'length'), or 'stopped' by the user
+    stop_reason: str = ""     # Why an assistant reply ended, as Ollama reports it ('stop', 'length'), 'stopped' by the user, or REPEATING
     tool: str = ""            # The tool name as the model called it
     resolved: str = ""        # The tool's own name, if the call named a known tool
     server: str = ""          # The key of the server that has the tool
@@ -182,6 +182,53 @@ def format_number(n: int) -> str:
     Formats a number with spaces between the thousands: 32 000.
     """
     return f"{n:,}".replace(",", " ")
+
+# A reply that Local Fox stopped because it kept repeating the same lines (Entry.stop_reason)
+REPEATING = "repeating"
+# Two kinds of loops were met (gemma4:26b): the same few sentences over and over ("Applying. / Everything is ready."),
+# and the same function written out again in code block after code block, 25 to 50 times. Code itself repeats
+# lines ("assert ..." in a test) within one block, so: a line outside code blocks seen LOOP_REPEATS times is a loop,
+# and so are LOOP_CODE_LINES different lines each seen in LOOP_CODE_BLOCKS code blocks. Only lines of LOOP_MIN_LINE
+# characters with letters count ("}", "|---|" repeat). The limits are high on purpose: a reply that drafted the same
+# class ten times still ended with a good tool call, and stopping it would have lost that; the loops went on to 50.
+LOOP_REPEATS = 12
+LOOP_CODE_BLOCKS = 10
+LOOP_CODE_LINES = 3
+LOOP_MIN_LINE = 8
+LOOP_TAIL_CHARS = 20_000  # Only the end of a reply is looked at, so the check stays quick as the reply grows
+_FENCE = re.compile(r"^[ \t]*```", re.MULTILINE)
+
+def repeating(text: str) -> bool:
+    """
+    Returns whether the end of a reply (its thinking or its answer) keeps repeating itself: a line outside code
+    blocks that recurs LOOP_REPEATS times, or LOOP_CODE_LINES lines that recur in LOOP_CODE_BLOCKS code blocks.
+    Models in a loop vary part of each round ("Wait, I'll check if x is used"), so recurring lines are looked for,
+    not whole repeated blocks.
+    """
+    start = max(0, len(text) - LOOP_TAIL_CHARS)
+    if start:
+        start = text.rfind("\n", 0, start) + 1  # The tail starts with a whole line
+    # Only fences at the start of a line open or close a block; one in the middle of a sentence does not
+    in_code = len(_FENCE.findall(text, 0, start)) % 2 == 1
+    prose: dict[str, int] = {}
+    code: dict[str, int] = {}
+    block: set[str] = set()  # The lines of the current code block, each counted once per block
+    for line in text[start:].splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code = not in_code
+            block = set()
+            continue
+        if len(stripped) < LOOP_MIN_LINE or not any(ch.isalpha() for ch in stripped):
+            continue
+        if not in_code:
+            prose[stripped] = prose.get(stripped, 0) + 1
+            if prose[stripped] >= LOOP_REPEATS:
+                return True
+        elif stripped not in block:
+            block.add(stripped)
+            code[stripped] = code.get(stripped, 0) + 1
+    return sum(1 for n in code.values() if n >= LOOP_CODE_BLOCKS) >= LOOP_CODE_LINES
 
 def estimate_tokens(text: str) -> int:
     """

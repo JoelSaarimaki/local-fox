@@ -255,6 +255,10 @@ model goes on without knowing its task. Local Fox keeps that from happening:
 - **An interrupted reply is marked**, in the feed and in what the model gets, so that neither takes it as
   finished: "[The user stopped this reply here.]", or "[This reply was cut off here: the context was full.]".
   A reply stopped before any text arrived is not sent to the model at all.
+- **A reply that keeps repeating itself is stopped**, as "Stop" would: a line written 12 times, or the same code
+  written out in 10 code blocks (in the thinking or the answer), which some models do until the context is full. It
+  is marked "[Local Fox stopped this reply here: it kept repeating the same lines.]", its tool calls are not run, and
+  a notice says so; your next message continues. Drafting the same code a few times is not stopped.
 - **Only your next message continues.** Local Fox never sends anything on its own; type e.g. "continue", or a
   new instruction. The model gets the whole conversation with the marks and the stopped calls' responses.
 

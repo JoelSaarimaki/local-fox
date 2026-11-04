@@ -54,6 +54,9 @@ CONTEXT_WARNING = ("\n\n[Local Fox: this conversation now uses about {used} of t
 ROOM_MADE_NOTE = ("\n\n[Local Fox: the context was full, so the responses of {count} older tool calls were replaced with "
                   "notes. " + USE_WHAT_YOU_FOUND + "]")
 CUT_OFF_MARK = "\n\n[This reply was cut off here: the context was full.]"
+# A reply that keeps repeating the same lines would run until the context is full and then stay in the conversation
+# (a loop of 50 000 characters was met), so it is stopped as the user's "Stop" would, and marked so (conversation.repeating)
+REPEATING_MARK = "\n\n[Local Fox stopped this reply here: it kept repeating the same lines.]"
 # The parts of the feed of which the latest is kept open
 TOOL_CALL, THINKING, ANSWER = "tool call", "thinking", "answer"
 STOPPED_WHILE ="The user stopped the session while this call ran; its result is unknown."
@@ -587,6 +590,8 @@ class Session:
                 self.notice(f"The reply stopped because the context is full: {format_number(self.num_ctx)} tokens.",
                             ["Clear", "Export", "Larger context"])
                 return
+            if entry.stop_reason == c.REPEATING:
+                return
             if not calls:
                 if not entry.text.strip():
                     self.notice("The model ended its turn without a reply or a tool call.")
@@ -796,6 +801,7 @@ class Session:
         self._log_request(tools, think)
         self._request_chars = self._chars()
         self._cut_by_ollama = False
+        loop = False
 
         def log_reply(**fields):
             self.log.write("reply", content=entry.text, thinking=entry.thinking or None, done_reason=entry.stop_reason,
@@ -809,10 +815,14 @@ class Session:
                     if not entry.thinking:
                         self._open_latest(THINKING, entry)
                     entry.thinking += message.thinking
+                    loop = "\n" in message.thinking and c.repeating(entry.thinking)
                 if message.content:
                     if not entry.text:
                         self._open_latest(ANSWER, entry)
                     entry.text += message.content
+                    loop = loop or ("\n" in message.content and c.repeating(entry.text))
+                if loop:
+                    break
                 if message.tool_calls:
                     calls.extend(message.tool_calls)
                 if chunk.done:
@@ -845,6 +855,8 @@ class Session:
             self.error(explain_connection(error, self.config["ollama_host"]))
             return None
         entry.streaming = False
+        if loop:
+            return await self._stop_repeating(stream, entry, calls, log_reply)
         if entry.stop_reason == "length":
             entry.text += CUT_OFF_MARK  # The model sees in later requests that the reply did not end on its own
         self._update(entry)
@@ -856,6 +868,29 @@ class Session:
         self.messages.append(message)
         self.frontend.status()
         return entry, calls
+
+    async def _stop_repeating(self, stream, entry: Entry, calls: list, log_reply) -> tuple[Entry, list]:
+        """
+        Ends a reply that kept repeating the same lines: closes Ollama's stream, so that it stops generating, and keeps
+        what arrived as the user's "Stop" does, marked so that the model and the user see why it ended. Its tool calls,
+        if any came, are not run, and the turn ends: what comes next is the user's next message.
+        """
+        close = getattr(stream, "aclose", None)
+        if close:
+            try:
+                await close()
+            except Exception:  # The reply is stopped either way
+                pass
+        entry.stop_reason = c.REPEATING
+        if entry.text:  # What has arrived stays, also for the model, as with a stop by the user
+            entry.text += REPEATING_MARK
+            self.messages.append({"role": "assistant", "content": entry.text})
+        self._update(entry)
+        log_reply(tool_calls=_logged_calls(calls), repeating=True)
+        self.notice("The model kept repeating the same lines, so Local Fox stopped its reply. Send a message to go on: "
+                    "for example, tell it what to do next.")
+        self.frontend.status()
+        return entry, []
 
     def _open_latest(self, part: str, entry: Entry) -> None:
         """

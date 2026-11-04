@@ -9,8 +9,8 @@ TEXT = "#d4d4d4"
 BRIGHT = "#ececec"     # The user's messages
 DIM = "#7c7c7c"        # Secondary text: collapsed entries, notices, thinking
 DARK = "#4d4d4d"       # Forbidden files
-ACCENT = "#e8913a"     # Fox orange: headings, links, changed files, the prompt mark
-CODE = "#e3c48f"       # Inline code
+ACCENT = "#e8913a"     # Fox orange: links, changed files, the prompt mark, what needs attention
+CODE = "#e3c48f"       # Light yellow: inline code, and the headings of Markdown in the feed
 CODE_BG = "#222222"
 EXPANDED = "#1c1c1c"   # The box of an expanded tool call, instructions, filemap or tools in the feed
 OK = "#8fbf7f"
@@ -80,14 +80,14 @@ def feed_css() -> str:
     return f"""
     body {{ color: {TEXT}; }}
     a {{ color: {ACCENT}; text-decoration: none; }}
-    h1, h2, h3, h4, h5, h6 {{ color: {ACCENT}; font-weight: bold; margin-top: 8px; margin-bottom: 4px; }}
+    h1, h2, h3, h4, h5, h6 {{ color: {CODE}; font-weight: bold; margin-top: 8px; margin-bottom: 4px; }}
     h1 {{ font-size: large; }} h2 {{ font-size: medium; }} h3, h4, h5, h6 {{ font-size: medium; }}
     p {{ margin-top: 2px; margin-bottom: 6px; }}
     code {{ color: {CODE}; background-color: {CODE_BG}; font-family: {", ".join(FONT_FAMILIES)}, monospace; }}
     pre {{ background-color: {CODE_BG}; color: {TEXT}; margin-top: 2px; margin-bottom: 6px; font-family: {", ".join(FONT_FAMILIES)}, monospace; white-space: pre-wrap; }}  /* Long lines wrap instead of running past the feed */
     blockquote {{ color: {DIM}; margin-left: 12px; }}
     table {{ border-collapse: collapse; margin-bottom: 6px; }}
-    th {{ color: {ACCENT}; border: 1px solid {BORDER}; padding: 2px 6px; }}
+    th {{ color: {CODE}; border: 1px solid {BORDER}; padding: 2px 6px; }}
     td {{ border: 1px solid {BORDER}; padding: 2px 6px; }}
     hr {{ color: {BORDER}; }}
     .user {{ color: {BRIGHT}; }}

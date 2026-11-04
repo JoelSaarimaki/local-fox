@@ -11,7 +11,7 @@ import pytest
 from local_fox import config
 from local_fox import conversation as c
 from local_fox.mcp_servers import Servers, ServerTool
-from local_fox.session import CUT_OFF_MARK, SKIPPED_RESPONSE, STOPPED_BEFORE, STOPPED_MARK, Frontend, Session
+from local_fox.session import CUT_OFF_MARK, REPEATING_MARK, SKIPPED_RESPONSE, STOPPED_BEFORE, STOPPED_MARK, Frontend, Session
 
 SCHEMA = {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}
 
@@ -574,3 +574,49 @@ def test_a_users_message_never_gets_a_note(tmp_path):
     session.messages.append({"role": "user", "content": "Explain a.py"})
     session._note_to_model("\n\n[Local Fox: a note]")
     assert session.messages[-1] == {"role": "user", "content": "Explain a.py"}
+
+# --- A reply that keeps repeating itself ---
+
+LOOP_ROUND = "Wait, I'll check if self.{name} is used in refresh. No.\nApplying.\nEverything is ready.\nFinal content for src/card.py: (I'll use the code I prepared)\n"
+
+def looping_text(rounds=40):
+    return "".join(LOOP_ROUND.format(name=f"attr_{i}") for i in range(rounds))
+
+def test_a_reply_that_keeps_repeating_is_stopped_and_marked(tmp_path):
+    session, client, _ = make_session(tmp_path, [])
+    parts = [chunk(line + "\n") for line in looping_text().splitlines()]
+    session.client = FakeClient([parts + [chunk("Never reached", done=True)]])
+    asyncio.run(session.send("Fix the card"))
+    reply = next(e for e in session.entries if e.kind == c.ASSISTANT)
+    assert reply.stop_reason == c.REPEATING and reply.text.endswith(REPEATING_MARK)
+    assert len(reply.text) < 2500 and "Never reached" not in reply.text  # Stopped after about ten rounds
+    assert session.messages[-1] == {"role": "assistant", "content": reply.text}  # The model gets what the feed shows
+    assert any(e.kind == c.NOTICE and "kept repeating" in e.text for e in session.entries)
+    assert '"repeating": true' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
+
+def test_thinking_that_keeps_repeating_is_stopped_without_a_message(tmp_path):
+    session, _, _ = make_session(tmp_path, [])
+    session.client = FakeClient([[chunk(thinking=line + "\n") for line in looping_text().splitlines()]])
+    asyncio.run(session.send("Fix the card"))
+    reply = next(e for e in session.entries if e.kind == c.ASSISTANT)
+    assert reply.stop_reason == c.REPEATING and not reply.text
+    assert session.messages[-1]["role"] == "user"  # Thinking never goes back to the model
+    assert not any("without a reply" in e.text for e in session.entries if e.kind == c.NOTICE)
+
+@pytest.mark.parametrize("text", [
+    # Code drafted three times in thinking
+    "Let me draft it:\n" + "def refresh(self):\n    self.figure.update(self.plot_config)\n    self.label.configure(text=self.label_text)\n" * 3,
+    # A long table and a code block whose lines repeat
+    "| name | value |\n|---|---|\n" + "| something long | the same value |\n" * 8 + "```python\n" + "assert result.is_valid()\n" * 30 + "```\n",
+    # A long ordinary answer
+    "".join(f"Step {i}: change the function number {i} so that it returns the value.\n" for i in range(100)),
+])
+def test_ordinary_text_is_not_a_loop(text):
+    assert not c.repeating(text)
+
+def test_a_loop_is_found_in_a_long_reply():
+    assert c.repeating("An introduction.\n" * 3 + "x" * 30_000 + "\n" + looping_text(14))
+
+def test_the_same_code_written_again_and_again_is_a_loop():
+    draft = "Here is the code:\n```python\ndef refresh(self):\n    self.figure.update(self.plot_config)\n    self.label.configure(text=self.label_text)\n```\n"
+    assert not c.repeating(draft * 5) and c.repeating(draft * 12)

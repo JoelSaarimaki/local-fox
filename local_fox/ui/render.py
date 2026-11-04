@@ -120,6 +120,8 @@ def entry_html(entry: Entry) -> str:
         if entry.stop_reason == "stopped" and not entry.text:
             # A reply with text carries its mark in the text, as the model gets it
             parts.append("<p class=dim>(stopped before the reply began; nothing of it goes to the model)</p>")
+        if entry.stop_reason == c.REPEATING and not entry.text:
+            parts.append("<p class=dim>(stopped while thinking, as it kept repeating the same lines; nothing of it goes to the model)</p>")
         return "".join(parts)
     if entry.kind == c.TOOL:
         mark, cls = STATUS_MARKS.get(entry.status, ("", "dim"))

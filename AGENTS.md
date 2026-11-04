@@ -77,6 +77,10 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 - **Interrupted replies are marked** (`STOPPED_MARK`, `CUT_OFF_MARK` in `session.py`) in the entry's text and the
   message alike, so the model never gets an unfinished reply as a finished one, and the user sees the same text.
   Continuing is only ever the user's next message: no Continue button, no automatic resume.
+  A reply that keeps repeating itself (`conversation.repeating`: a line 12 times outside code blocks, or 3 lines in
+  10 code blocks, in the last 20 000 characters) is stopped as a user's Stop would, marked `REPEATING_MARK`, and
+  ends the turn with a notice (`Session._stop_repeating`). gemma4:26b looped for 50 000 characters; the limits are high
+  because a reply that drafted one class ten times still ended with a good call. Tune them against logged replies.
 - **No queue**: while a turn runs (or was sent and has not started, `MainWindow._busy`), a message is not taken
   and stays in the prompt; the user stops the model first. Don't add queued or interrupting sends without asking.
 - **Clipboard**: only Qt's own Ctrl + C / X / V, plus the filemap's explicit Copy path; nothing copies or pastes on
