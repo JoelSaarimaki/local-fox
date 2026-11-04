@@ -45,7 +45,7 @@ class ProjectDialog(_NoEnterDialog):
     def __init__(self, parent=None, startup: bool = True):
         super().__init__(parent)
         self.chosen: Path | None = None
-        self.setWindowTitle(APP_NAME)
+        self.setWindowTitle("Choose a project")
         self.resize(860, 500)
         layout = QVBoxLayout(self)
         header = QHBoxLayout()

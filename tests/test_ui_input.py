@@ -154,3 +154,10 @@ def test_long_lines_wrap_and_an_open_tool_call_is_boxed(app):
     call.collapsed = True
     feed.render(follow=False)
     assert feed._frames[0][1].frameFormat().background().style() == Qt.NoBrush
+
+def test_context_sizes_double_up_to_the_models_maximum():
+    from local_fox.ui.main_window import context_sizes
+    assert context_sizes(65536, 262144) == [4096, 8192, 16384, 32768, 65536, 131072, 262144]
+    assert context_sizes(50000, 131072) == [4096, 8192, 16384, 32768, 50000, 65536, 131072]  # A size set with /context stays
+    assert context_sizes(32768, None)[-1] == 1_048_576  # The model's maximum not known
+    assert context_sizes(8192, 40960)[-1] == 40960  # A maximum that is not a doubling step

@@ -57,6 +57,16 @@ def _button(text: str, slot, name: str = "", tip: str = "") -> QPushButton:
     button.clicked.connect(slot)
     return button
 
+def context_sizes(current: int, maximum: int | None) -> list[int]:
+    """
+    Returns the context sizes to choose from: 4 096 tokens doubled up to the model's maximum (or 1 048 576 if it is
+    not known), the maximum itself, and the current size, which may be anything set with /context or config.json.
+    Doubling steps are the ones that make a difference in memory and in what fits; finer ones are for /context.
+    """
+    limit = maximum or 1_048_576
+    sizes = {4096 * 2 ** i for i in range(9) if 4096 * 2 ** i <= limit} | {limit, current}
+    return sorted(sizes)
+
 class MainWindow(QMainWindow):
     def __init__(self, settings: dict, config_error: str | None = None):
         """
@@ -86,7 +96,9 @@ class MainWindow(QMainWindow):
         bar = QFrame(objectName="bar")
         top = QHBoxLayout(bar)
         top.setContentsMargins(8, 4, 8, 4)
-        title = QLabel(f"{APP_NAME} {__version__}", objectName="accent")
+        # The name in orange and the version in grey, as in the start dialog
+        title = QLabel(f"<span style='color: {theme.ACCENT}; font-weight: bold'>{APP_NAME}</span>"
+                       f"&nbsp;<span style='color: {theme.DIM}'>{__version__}</span>")
         self.model_button = QToolButton(objectName="flat")
         self.model_button.setPopupMode(QToolButton.InstantPopup)
         self.model_button.setToolTip("The model: click to switch")
@@ -252,7 +264,7 @@ class MainWindow(QMainWindow):
         self.session = Session(self.settings, project, QtFrontend(self.bridge))
         self.project_label.setText(project.name)
         self.project_label.setToolTip(str(project))
-        self.setWindowTitle(f"{project.name} — {APP_NAME}")
+        self.setWindowTitle(f"{APP_NAME} — {project.name}")
         self._hide_notice()
         recent_projects.add(project)
         self._config_notified = None
@@ -783,11 +795,12 @@ class MainWindow(QMainWindow):
     def _ask_context(self) -> None:
         if not self.session:
             return
-        maximum = self.session.max_context or 1_048_576
-        size, ok = QInputDialog.getInt(self, "Context size", f"Context size in tokens for this session (at most {format_number(maximum)}):",
-                                       self.session.num_ctx, 512, maximum, 1024)
-        if ok:
-            self._set_context(size)
+        sizes = context_sizes(self.session.num_ctx, self.session.max_context)
+        labels = [f"{format_number(size)} tokens" for size in sizes]
+        label, ok = QInputDialog.getItem(self, "Context size", "Context size for this session (/context sets any other size):",
+                                         labels, sizes.index(self.session.num_ctx), False)
+        if ok and sizes[labels.index(label)] != self.session.num_ctx:
+            self._set_context(sizes[labels.index(label)])
 
     # --- Closing ---
 

@@ -74,7 +74,8 @@ Local Fox starts by asking for the project, before the window opens:
 
 ## The window
 
-- **Top bar**: the version, the model (click to switch), the context size (click to change it for the session),
+- **Top bar**: the version, the model (click to switch), the context size (click to choose another for the session,
+  from 4 096 tokens doubled up to the model's maximum; `/context <size>` sets any other),
   and where the model runs (`ollama ps`). **Export** and the ≡ menu with the other commands are on the right.
 - **Bottom bar**: **Clear** and **Help** on the left, and on the right how much of the context the conversation
   uses and **Send** (**Stop** while the model runs), far apart so that one is not pressed for the other. The

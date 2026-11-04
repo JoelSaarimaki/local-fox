@@ -100,7 +100,7 @@ def test_window_opens_only_a_project(app, tmp_path):
 
 def test_no_recent_projects_is_a_text_not_a_row(app):
     dialog = ProjectDialog(None, startup=True)
-    assert dialog.windowTitle() == "Local Fox"
+    assert dialog.windowTitle() == "Choose a project"
     assert dialog.list.count() == 0 and dialog.list.isHidden() and not dialog.empty.isHidden()
 
 def test_icon_from_the_logo(app, tmp_path):
