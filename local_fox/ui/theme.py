@@ -66,10 +66,13 @@ def stylesheet(font_size: int) -> str:
     QToolButton::menu-indicator {{ image: none; width: 0px; }}
     QSplitter::handle {{ background-color: {BORDER}; }}
     QScrollBar:vertical {{ background: {BG}; width: 10px; }}
-    QScrollBar::handle:vertical {{ background: #333333; min-height: 20px; }}
+    QScrollBar::handle:vertical {{ background: {DARK}; min-height: 20px; border-radius: 3px; margin: 1px; }}
     QScrollBar:horizontal {{ background: {BG}; height: 10px; }}
-    QScrollBar::handle:horizontal {{ background: #333333; min-width: 20px; }}
+    QScrollBar::handle:horizontal {{ background: {DARK}; min-width: 20px; border-radius: 3px; margin: 1px; }}
+    QScrollBar::handle:hover {{ background: {DIM}; }}
     QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
+    /* Unstyled, Qt draws the track in a light pattern that looks like the bar */
+    QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
     QToolTip {{ background-color: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; }}
     """
 
