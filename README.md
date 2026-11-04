@@ -231,7 +231,7 @@ model goes on without knowing its task. Local Fox keeps that from happening:
 - **If Ollama cuts the conversation anyway** (its count of a request drops although nothing was removed), the turn
   stops and the feed says so.
 - **New projects limit a tool response** to 16 000 characters (`max_output_chars` in the tools config, about 4 000
-  tokens; the tools' own default is 40 000), and the outline of a folder to a quarter of that.
+  tokens; the tools' own default is 40 000), and the outline of a folder to half of that, at most 8 000 characters.
 
 ## Stopping and continuing
 
