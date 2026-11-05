@@ -71,8 +71,14 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   (`condense.py`): a read keeps the functions and classes the conversation named since the read (the model's thinking,
   replies and call arguments, and the user's messages; never tool responses, and only the current conversation, as
   the entries start again at "Clear"), the rest keeps its first line and a `⋯ lines a-b left out ⋯` marker; Markdown
-  is kept whole if its path was named since, otherwise as headings; a text search keeps the files named since. Only
-  if that is not enough are whole responses replaced, in the same order. Replayed on a logged session (2026-11-05),
+  is kept whole if its path was named since, otherwise as headings; a text search keeps the files named since. If
+  that is not enough, the parts that were named go too, across the responses, by their last mention, oldest first
+  (`condense.last_mention`; the latest reads of the files the user named last, and parts the user's messages name
+  never). Only then are whole responses replaced, in the same order. On the run of 2026-11-05 that ended full, this
+  lost 25 to 45 % less than whole removal; graded scores (mention counts, recency weights, the user's mentions
+  weighted higher) gave the same as this plain order, so they were not added. The room kept for the reply is an
+  eighth of the context or `REPLY_ROOM_FACTOR` times the conversation's longest reply (`Session._reply_room`): that
+  run ended when flint's 9 000-token thinking overran the eighth. Replayed on a logged session (2026-11-05),
   keeping the parts named since lost about 28 % less of what the model mentioned later per token freed than whole
   removal; broader rules (repeated words, the prompt's words) kept far more without losing less. The order:
   out-of-date reads first (`conversation.superseded`: the same part read again, the whole file read later, an
@@ -147,7 +153,7 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 | `local_fox/saved_conversations.py` | Saving, listing and loading the project's conversations |
 | `local_fox/recent_projects.py` | The recent projects of the start dialog |
 | `local_fox/conversation.py` | `Entry`, the feed's data, and what is read from the entries: out-of-date and named reads, repeated calls, loops (`repeating`) |
-| `local_fox/condense.py` | Shortening old tool responses to the parts the conversation mentioned since, to make room in the context |
+| `local_fox/condense.py` | Shortening old tool responses to make room in the context: the parts not mentioned since, then by their last mention |
 | `local_fox/ollama_errors.py` | Ollama's errors explained for the feed, with what to try first |
 | `local_fox/ollama_server.py` | The Ollama panel's data: polling `ollama ps`, the activity text, starting and stopping `ollama serve` |
 | `local_fox/shell_path.py` | macOS: the login shell's PATH, added at the start |

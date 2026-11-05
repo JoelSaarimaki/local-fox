@@ -8,11 +8,16 @@ still sees what the file has and where, and reads a part again by its section or
 Markdown document is kept whole if its path was mentioned since, and otherwise as its headings. A text search keeps
 the matches in files mentioned since; the other files keep a line with their match lines.
 
+If that is not enough, the parts that were mentioned are left out too, those whose last mention is the oldest first
+(`last_mention`), across all the responses; parts the user named in a message stay until whole responses are removed.
+
 The choice comes from what was written and called, never from asking the model (see AGENTS.md). Replayed on a
 logged session (2026-11-05), keeping the parts named since lost about 28 % less of what the model mentioned later,
 per token freed, than removing whole responses. Broader rules (any word the model repeated, the words of the user's
-prompt) kept much more without losing less. Only the current conversation counts: the session's entries start
-again at "Clear".
+prompt) kept much more without losing less. On another logged session, leaving out mentioned parts by their last
+mention, instead of removing whole responses, lost 25 to 45 % less when shortening alone was not enough; weighting
+the mentions by their number, age and writer gave the same result as this plain order. Only the current
+conversation counts: the session's entries start again at "Clear".
 
 The files are split with the tools' own outlines (ollmcp_tools.parsing, which reads no configuration and no files).
 A partial read of a Python file often does not parse (it starts inside a class, or ends inside a function), and is
@@ -165,10 +170,57 @@ def _indent_of(code: list[str], start: int, end: int, head: int) -> str:
             return code[i][:len(code[i]) - len(code[i].lstrip())]
     return code[start][:len(code[start]) - len(code[start].lstrip())] + "    "
 
-def shorten_read(entry: c.Entry, known: str) -> str | None:
+@dataclass
+class Unit:
     """
-    Returns a read's response shortened to the parts mentioned in known (what was written since the read), or None
-    if it cannot be shortened or would not get shorter enough to be worth it.
+    A piece of a response that can be left out: a part of a read (its first line kept) or a file's matches in a text
+    search (a line with their line numbers kept). It is mentioned by its names (a code file's functions and classes)
+    or by its file's path (a Markdown document, a search's file).
+    """
+    names: set[str]
+    path: str
+    start: int  # Its first line in the code block of the response
+    end: int
+    head: int = 0  # The lines kept before its marker
+    part: Part | None = None
+    marker: str = ""  # The line that replaces it
+
+    def mentioned(self, text: str, said: set[str]) -> bool:
+        return bool(self.names & said) or bool(self.path and _path_mentioned(self.path, text))
+
+@dataclass
+class Shortening:
+    """
+    What of a response can be left out (its units), and how the response looks with some of them left out.
+    """
+    entry: c.Entry
+    units: list[Unit]
+    header: str
+    fence: str
+    code: list[str]
+    rest: str
+    note: str  # How the model gets a part back
+
+    def text(self, cut: set[int]) -> str:
+        """
+        Returns the response with the units of these indexes left out.
+        """
+        left_out = {self.units[n].start: self.units[n] for n in cut}
+        out, i = [], 0
+        while i < len(self.code):
+            unit = left_out.get(i)
+            if unit is None:
+                out.append(self.code[i])
+                i += 1
+                continue
+            out.extend(self.code[unit.start:unit.start + unit.head])
+            out.append(unit.marker)
+            i = unit.end + 1
+        return "\n".join([self.header.rstrip("\n"), self.note, "", self.fence, *out, self.rest])
+
+def _read_plan(entry: c.Entry) -> Shortening | None:
+    """
+    Returns what of a read can be left out: its parts that are long enough to be worth a marker.
     """
     split = _split_response(entry.response)
     path = str((entry.args or {}).get("path") or "") if isinstance(entry.args, dict) else ""
@@ -181,99 +233,140 @@ def shorten_read(entry: c.Entry, known: str) -> str | None:
     first = int(m.group(1))
     suffix = PurePosixPath(path.replace("\\", "/")).suffix.lower()
     markdown = suffix in parsing.MARKDOWN_SUFFIXES
-    if markdown and _path_mentioned(path, known):
-        return None  # A document named since is kept whole
     parts = _outline_parts(code, first, suffix) if suffix in parsing.OUTLINE_SUFFIXES else None
     if parts is None:
         if suffix not in parsing.PYTHON_SUFFIXES:
             return None
         parts = _python_parts(code, first)
-    said = words(known)
-    cut = {}  # The first line of each left-out part (index in code) -> (lines kept before the marker, part)
+    units, example = [], ""
     for part in parts:
         start, end = part.start - first, part.end - first
         if start < 0 or end >= len(code) or end < start or part.always:
             continue
-        if not markdown and part.names & said:
-            continue
         head = _head_length(code, start, end) if part.keep_head else 0
         if end - start + 1 - head < 3:
             continue  # Too short to be worth a marker
-        cut[start] = (head, part)
-    if not cut:
-        return None
-    out, i, example = [], 0, ""
-    while i < len(code):
-        if i not in cut:
-            out.append(code[i])
-            i += 1
-            continue
-        head, part = cut[i]
-        start, end = part.start - first, part.end - first
-        out.extend(code[start:start + head])
         what = f" ({part.label})" if part.label and not head else ""
-        out.append(f"{_indent_of(code, start, end, head)}{MARK} lines {part.start + head}-{part.end} left out{what} {MARK}")
+        marker = f"{_indent_of(code, start, end, head)}{MARK} lines {part.start + head}-{part.end} left out{what} {MARK}"
+        # A document is mentioned by its path, code by the names of its functions and classes
+        units.append(Unit(set() if markdown else part.names, path if markdown else "", start, end, head, part, marker))
         example = example or part.section
-        i = end + 1
+    if not units:
+        return None
     how = (f"read_file_with_metadata(path={path!r}, section={example!r})" if example and not markdown
            else f"read_file_with_metadata(path={path!r}, start_line=..., end_line=...)")
     what = ("the text under its headings is left out" if markdown else
-            "the parts not mentioned in the conversation since this read are left out, their first lines kept")
+            "the parts the conversation has not mentioned lately are left out, their first lines kept")
     note = (f"- Shortened by Local Fox to make room in the context: {what}, each marked with {MARK} and its lines. "
             f"Read a part again only if you need its exact text, e.g. {how}.")
-    shortened = "\n".join([header.rstrip("\n"), note, "", fence, *out, rest])
-    return shortened if _worth_it(entry.response, shortened) else None
+    return Shortening(entry, units, header, fence, code, rest, note)
 
-def shorten_search(entry: c.Entry, known: str) -> str | None:
+def _search_plan(entry: c.Entry) -> Shortening | None:
     """
-    Returns a text search's response with the matches in files not mentioned since replaced with one line per file
-    that gives their line numbers, or None if nothing would be left out.
+    Returns what of a text search can be left out: the matches of each file with two or more of them.
     """
     split = _split_response(entry.response)
     if not split:
         return None
     header, fence, lines, rest = split
-    groups: dict[str, list[str]] = {}
-    for line in lines:
+    groups: dict[str, list[tuple[int, str]]] = {}
+    for i, line in enumerate(lines):
         m = _MATCH.match(line)
         if m:
-            groups.setdefault(m.group(1), []).append(m.group(2))
-    left_out = {f for f in groups if not _path_mentioned(f, known) and len(groups[f]) >= 2}
-    if not left_out:
-        return None
-    out, done = [], set()
-    for line in lines:
-        m = _MATCH.match(line)
-        if m and m.group(1) in left_out:
-            if m.group(1) not in done:
-                numbers = groups[m.group(1)]
-                out.append(f"{m.group(1)}: {MARK} {len(numbers)} matches left out, at lines {', '.join(numbers)} {MARK}")
-                done.add(m.group(1))
+            groups.setdefault(m.group(1), []).append((i, m.group(2)))
+    units = []
+    for file, matches in groups.items():
+        indexes = [i for i, _ in matches]
+        # Left out as one line in the place of the first; only a file whose matches are together is a unit
+        if len(matches) < 2 or indexes != list(range(indexes[0], indexes[-1] + 1)):
             continue
-        out.append(line)
-    note = (f"- Shortened by Local Fox to make room in the context: the matches in files not mentioned in the "
-            f"conversation since this search are left out, their line numbers kept ({MARK}).")
-    shortened = "\n".join([header.rstrip("\n"), note, "", fence, *out, rest])
-    return shortened if _worth_it(entry.response, shortened) else None
+        marker = f"{file}: {MARK} {len(matches)} matches left out, at lines {', '.join(n for _, n in matches)} {MARK}"
+        units.append(Unit(set(), file, indexes[0], indexes[-1], marker=marker))
+    if not units:
+        return None
+    note = (f"- Shortened by Local Fox to make room in the context: the matches in files the conversation has not "
+            f"mentioned lately are left out, their line numbers kept ({MARK}).")
+    return Shortening(entry, units, header, fence, lines, rest, note)
 
-def _worth_it(before: str, after: str) -> bool:
-    saved = len(before) - len(after)
-    return saved >= MIN_SAVED_CHARS and saved >= MIN_SAVED_SHARE * len(before)
-
-def shorten(entry: c.Entry, known: str) -> str | None:
+def plan(entry: c.Entry) -> Shortening | None:
     """
-    Returns the entry's response shortened for the context, or None if it is not a response that is shortened (a
-    successful read or text search) or nothing of it would be left out. known is what the conversation has written
-    since the call (see written_since).
+    Returns what of the entry's response can be left out, or None if it is not a response that is shortened (a
+    successful read or text search) or has nothing to leave out.
     """
     if entry.kind != c.TOOL or entry.status != c.OK or entry.images:
         return None
     name = entry.resolved or entry.tool
     if name == "read_file_with_metadata":
-        return shorten_read(entry, known)
+        return _read_plan(entry)
     if name == "search_text_in_files":
-        return shorten_search(entry, known)
+        return _search_plan(entry)
     return None
+
+def worth_it(before: str, after: str) -> bool:
+    """
+    Checks if a shortening saves enough to change the response for: every change makes Ollama process the prompt again.
+    """
+    saved = len(before) - len(after)
+    return saved >= MIN_SAVED_CHARS and saved >= MIN_SAVED_SHARE * len(before)
+
+def shorten(entry: c.Entry, known: str) -> str | None:
+    """
+    Returns the entry's response with the units known does not mention left out, or None if it is not shortened
+    (see plan) or would not get shorter enough to be worth it. known is what the conversation has written since the
+    call (see written_since).
+    """
+    shortening = plan(entry)
+    if not shortening:
+        return None
+    said = words(known)
+    cut = {n for n, unit in enumerate(shortening.units) if not unit.mentioned(known, said)}
+    if not cut:
+        return None
+    text = shortening.text(cut)
+    return text if worth_it(entry.response, text) else None
+
+# The last mention of a unit that the user named: the user's messages set the task, so such units are kept longest
+BY_USER = 10 ** 9
+
+@dataclass
+class Written:
+    """
+    A text the conversation wrote that can mention a unit, at its position in the entries.
+    """
+    position: int
+    text: str
+    said: set[str]
+    user: bool
+
+def writings(entries: list[c.Entry]) -> list[Written]:
+    """
+    Returns the texts that tell which units are still in use: the user's messages, the model's thinking and replies,
+    and the arguments of its calls. Tool responses do not count: a search lists names that nobody needs.
+    """
+    out = []
+    for position, entry in enumerate(entries):
+        if entry.kind == c.USER:
+            texts, user = [entry.text], True
+        elif entry.kind == c.ASSISTANT:
+            texts, user = [entry.thinking, entry.text], False
+        elif entry.kind == c.TOOL:
+            texts, user = [str(entry.args)], False
+        else:
+            continue
+        text = "\n".join(t for t in texts if t)
+        if text:
+            out.append(Written(position, text, words(text), user))
+    return out
+
+def last_mention(unit: Unit, written: list[Written], position: int) -> int | None:
+    """
+    Returns when the conversation last mentioned a unit of the response at this position: BY_USER if a message of
+    the user mentions it (any of them), the position of the latest mention after the response, or None if nothing
+    mentioned it since.
+    """
+    if any(w.user and unit.mentioned(w.text, w.said) for w in written):
+        return BY_USER
+    return next((w.position for w in reversed(written) if w.position > position and unit.mentioned(w.text, w.said)), None)
 
 def written_since(entries: list[c.Entry], entry: c.Entry) -> str:
     """

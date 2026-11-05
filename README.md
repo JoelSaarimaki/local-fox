@@ -346,7 +346,10 @@ Ollama does not refuse a longer request: it silently drops the oldest messages, 
 model goes on without knowing its task. Local Fox keeps that from happening:
 
 - **Before every request**, it estimates the request's size (calibrated with Ollama's own counts) and leaves room
-  for the reply. If the request would not fit, it makes room until the request takes three quarters of the room.
+  for the reply: an eighth of the context, or one and a half times the model's longest reply in the conversation if
+  that is more (at most half the context). A model that thinks at length needs it: flint:40b thought for 9 000 tokens
+  while drafting a change, more than the eighth of a 64k context, and the reply was cut off with all its thinking.
+  If the request would not fit, it makes room until the request takes three quarters of the room.
   Making room seldom, with a margin, matters for speed: every change to earlier messages makes Ollama process the
   whole conversation again, which took two to three minutes per request for 55 000 tokens on a laptop's CPU.
 - **First, old responses are shortened** to what is still in use. A file read keeps the functions and classes that
@@ -358,6 +361,10 @@ model goes on without knowing its task. Local Fox keeps that from happening:
   current conversation counts: what was said before "Clear" does not. Replayed on a logged session, this lost about
   a quarter less of what the model needed later than removing whole responses, for the same room. The feed marks
   such a call "(response shortened in the model's context)" and shows both what the model has and the whole response.
+- **Then the parts that were named are left out too**, across all the old responses, those named longest ago
+  first; the parts you named in your messages stay. On a logged session this lost 25 to 45 % less of what the model
+  needed later than removing whole responses; counting the mentions or weighting them by age or by who wrote them
+  did no better than this plain order.
 - **Only if that is not enough**, whole responses are replaced with a short note ("Removed by Local Fox to make room
   in the context: the response of read_file_with_metadata(path='src/app.py'), about 5 900 tokens. Read it again only
   if you need its exact text, and then only the section you need: read_file_with_metadata(path='src/app.py',

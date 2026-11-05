@@ -40,6 +40,11 @@ STOPPED_MARK = "\n\n[The user stopped this reply here.]"
 # the start of the conversation, and Ollama then processes the whole prompt again, about 55 000 tokens taking two to
 # three minutes on a laptop's CPU. Removing a little before every step made every step that slow.
 ROOM_TARGET = 0.75
+# The room kept for the reply: at least an eighth of the context, and more for a model that writes long replies, as
+# its longest reply in the conversation times this (at most half the context). flint:40b's replies grew to 9 000
+# tokens of thinking while drafting a change, past the eighth of a 64k context, and the reply was cut off with the
+# context full, all its thinking lost.
+REPLY_ROOM_FACTOR = 1.5
 # The re-reads of removed responses in one turn after which the user is asked whether to go on: the model reading
 # again what was removed for room, which fills the context and removes the next, is a loop without progress.
 REREADS_TO_ASK = 3
@@ -55,7 +60,7 @@ USE_WHAT_YOU_FOUND = ("Do not read again what you have already read. If you are 
                       "the part you edit, and finish the steps you started.")
 CONTEXT_WARNING = ("\n\n[Local Fox: this conversation now uses about {used} of the {budget} tokens the context allows, and "
                    "older tool responses will soon be removed to make room. " + USE_WHAT_YOU_FOUND + "]")
-# {what}: "3 older tool responses were shortened to the parts mentioned since and the responses of 2 older tool calls
+# {what}: "3 older tool responses were shortened to the parts mentioned lately and the responses of 2 older tool calls
 # were replaced with notes", or one of the two
 ROOM_MADE_NOTE = "\n\n[Local Fox: the context was full, so {what}. " + USE_WHAT_YOU_FOUND + "]"
 CUT_OFF_MARK = "\n\n[This reply was cut off here: the context was full.]"
@@ -147,6 +152,7 @@ class Session:
         # code has fewer characters per token than prose; and Ollama's count of the last request, to notice a cut
         self._tokens_per_char = 1 / 3.2
         self._last_prompt_tokens = 0
+        self._longest_reply = 0  # The most tokens the model wrote in one reply in this conversation (_reply_room)
         self._last_request_chars = 0  # The size of the request that _last_prompt_tokens counted
         self._request_chars = 0
         self._made_room = False
@@ -325,7 +331,7 @@ class Session:
         self.entries, self.messages = [], []
         self._latest = {}
         self._warned = False
-        self._last_prompt_tokens = self._last_request_chars = 0
+        self._last_prompt_tokens = self._last_request_chars = self._longest_reply = 0
         self.saved_path, self._created = None, None
         self.allow_all = False
         self.changed_files = set()
@@ -549,6 +555,7 @@ class Session:
     async def set_model(self, model: str) -> str | None:
         self.model = model
         self._tokens_per_char, self._last_prompt_tokens, self._last_request_chars = 1 / 3.2, 0, 0  # Another tokenizer
+        self._longest_reply = 0  # And another way of writing
         error = await self.load_model_info()
         if not error and self.max_context and self.num_ctx > self.max_context:
             self.num_ctx = self.max_context
@@ -718,7 +725,9 @@ class Session:
         reads go first (a file read again or changed later, see `superseded`), then the oldest responses, and last the
         latest reads of the files the user named in their messages (`named_reads`). In that order, the out-of-date
         reads are removed and the others first shortened to the parts the conversation has mentioned since
-        (`condense.shorten`); only if that is not enough are whole responses replaced, in the same order. The note gives the
+        (`condense`); if that is not enough, the mentioned parts are left out too, across the responses, those
+        mentioned longest ago first, and the parts the user named never; only then are whole responses replaced, in
+        the same order. The room kept for the reply grows with the model's longest reply (`_reply_room`). The note gives the
         call that gets the content back, but asks the model to call it only if it needs the exact text, and for a whole
         file to read only the section it needs. Room is made down to ROOM_TARGET of the budget, so that it is made
         seldom. The responses of the latest step stay, as do all messages of the user and the model, so the model keeps
@@ -726,7 +735,7 @@ class Session:
         The order is decided from the calls alone, not by asking the model what it still needs: the small models
         judge that poorly, and a tool for it would add to the definitions sent with every request.
         """
-        budget = self.num_ctx - max(2048, self.num_ctx // 8)
+        budget = self.num_ctx - self._reply_room()
         if self._estimate() <= budget:
             if self._estimate() > budget * WARN_AT and not self._warned:
                 self._note_to_model(CONTEXT_WARNING.format(used=format_number(self._estimate()), budget=format_number(budget)))
@@ -781,14 +790,46 @@ class Session:
                 named_removed.append(target)
             tokens += size
 
-        def shorten(k: int) -> None:
-            """Shortens a response to the parts the conversation mentioned since (condense.py), if it can be."""
+        written = condense.writings(self.entries)
+        positions = {id(e): n for n, e in enumerate(self.entries)}
+        plans: dict[int, tuple | None] = {}
+
+        def plan(k: int) -> tuple | None:
+            """
+            Returns what of a response can be left out (condense.plan), the units left out already (not mentioned
+            since, or left out by an earlier room-making) and when each unit was last mentioned.
+            """
+            if k not in plans:
+                entry = tool_entries[k] if matched else None
+                shortening = condense.plan(entry) if entry and not entry.removed else None
+                if shortening is None:
+                    plans[k] = None
+                else:
+                    lasts = [condense.last_mention(unit, written, positions[id(entry)]) for unit in shortening.units]
+                    cut = {n for n, (unit, last) in enumerate(zip(shortening.units, lasts))
+                           if last is None or (entry.shortened and unit.marker in entry.shortened)}
+                    plans[k] = (shortening, cut, lasts)
+            return plans[k]
+
+        def shorten(k: int, more: int | None = None) -> None:
+            """
+            Leaves out of a response its units not mentioned since, and the unit more if given. Without more, only
+            if that saves enough to be worth changing the response for.
+            """
             nonlocal tokens
-            entry, i = tool_entries[k], tool_indexes[k]
-            short = condense.shorten(entry, condense.written_since(self.entries, entry))
-            if not short:
+            planned = plan(k)
+            if not planned:
                 return
+            shortening, cut, _ = planned
+            if more is not None:
+                cut.add(more)
+            if not cut:
+                return
+            entry, i = tool_entries[k], tool_indexes[k]
+            short = shortening.text(cut)
             before = len(self.messages[i].get("content", ""))
+            if more is None and not condense.worth_it(entry.response, short):
+                return
             self.messages[i] = {**self.messages[i], "content": short}
             entry.shortened = short
             self._update(entry)
@@ -799,8 +840,7 @@ class Session:
             entry = tool_entries[k] if matched else None
             return not (entry and entry.removed) and len(self.messages[tool_indexes[k]].get("content", "")) >= 400
 
-        # First out-of-date reads are removed and the other responses shortened, in that order; only if that is not
-        # enough are whole responses removed, in the same order (the shortened ones too)
+        # First out-of-date reads are removed and the other responses shortened to what was mentioned since
         for k in candidates:
             if self._estimate() <= room_goal:
                 break
@@ -808,6 +848,21 @@ class Session:
                 remove(k)
             elif matched and not tool_entries[k].removed and not tool_entries[k].shortened:
                 shorten(k)
+        # Then the parts that were mentioned, across the responses, those mentioned longest ago first (the latest
+        # reads of the files the user named last); a part the user named stays
+        if self._estimate() > room_goal:
+            ranked = []
+            for k in candidates:
+                planned = None if k in stale else plan(k)
+                if planned:
+                    _, cut, lasts = planned
+                    ranked.extend((k in named, last, k, n) for n, last in enumerate(lasts)
+                                  if n not in cut and last is not None and last != condense.BY_USER)
+            for _, _, k, n in sorted(ranked):
+                if self._estimate() <= room_goal:
+                    break
+                shorten(k, n)
+        # Only then are whole responses removed, in the order of the candidates (the shortened ones too)
         for k in candidates:
             if self._estimate() <= room_goal:
                 break
@@ -817,7 +872,7 @@ class Session:
             self._made_room = True
             what = " and ".join(part for part in (
                 f"{len(shortened)} older tool response{'s were' if len(shortened) > 1 else ' was'} shortened to the parts "
-                f"mentioned since" if shortened else "",
+                f"mentioned lately" if shortened else "",
                 f"the response{'s' if len(removed) > 1 else ''} of {len(removed)} older tool call{'s were' if len(removed) > 1 else ' was'} "
                 f"replaced with {'notes' if len(removed) > 1 else 'a note'}" if removed else "") if part)
             self._note_to_model(ROOM_MADE_NOTE.format(what=what))
@@ -827,7 +882,7 @@ class Session:
                           "which you named: the context is small for this task." if named_removed else "")
             done = " and ".join(part for part in (
                 f"{len(shortened)} earlier tool response{'s were' if len(shortened) > 1 else ' was'} shortened to the parts "
-                f"the conversation has mentioned since" if shortened else "",
+                f"the conversation has mentioned lately" if shortened else "",
                 f"the response{'s' if len(removed) > 1 else ''} of {len(removed)} earlier tool call{'s were' if len(removed) > 1 else ' was'} "
                 f"replaced with a note" if removed else "") if part)
             self.notice(f"To fit the context, {done} (about {format_number(tokens)} tokens). The model can call them again "
@@ -835,6 +890,13 @@ class Session:
             self.used_tokens = self._estimate()
             self.frontend.status()
         return self._estimate() <= budget
+
+    def _reply_room(self) -> int:
+        """
+        Returns the tokens of the context kept for the reply: an eighth of it (at least 2 048), or REPLY_ROOM_FACTOR
+        times the longest reply of the conversation if that is more, at most half the context.
+        """
+        return min(self.num_ctx // 2, max(2048, self.num_ctx // 8, int(self._longest_reply * REPLY_ROOM_FACTOR)))
 
     def _note_to_model(self, note: str) -> None:
         """
@@ -944,6 +1006,7 @@ class Session:
                     entry.stop_reason = chunk.done_reason or "stop"
                     self.used_tokens = (chunk.prompt_eval_count or 0) + (chunk.eval_count or 0) or self.used_tokens
                     self._counted(chunk.prompt_eval_count or 0)
+                    self._longest_reply = max(self._longest_reply, chunk.eval_count or 0)
                     counts = {"prompt_tokens": chunk.prompt_eval_count, "output_tokens": chunk.eval_count,
                               "load_seconds": _seconds(getattr(chunk, "load_duration", None)),
                               "prompt_seconds": _seconds(getattr(chunk, "prompt_eval_duration", None)),

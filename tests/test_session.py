@@ -688,8 +688,8 @@ def test_old_responses_are_shortened_to_what_was_mentioned_before_any_is_removed
     assert "- Shortened by Local Fox to make room in the context" in a.shortened and a.response.count("step") > a.shortened.count("step")
     assert not calls["d.py"].shortened  # The latest step stays whole
     notes = [e.response for e in session.entries if e.kind == c.TOOL and "[Local Fox: the context was full, so" in e.response]
-    assert notes and re.search(r"older tool responses? (were|was) shortened to the parts mentioned since", notes[-1])
-    assert any(e.kind == c.NOTICE and "shortened to the parts the conversation has mentioned since" in e.text for e in session.entries)
+    assert notes and re.search(r"older tool responses? (were|was) shortened to the parts mentioned lately", notes[-1])
+    assert any(e.kind == c.NOTICE and "shortened to the parts the conversation has mentioned lately" in e.text for e in session.entries)
     import json
     made_room = [json.loads(line) for line in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8").splitlines()
                  if '"made_room"' in line]
@@ -704,6 +704,49 @@ def test_whole_responses_are_removed_when_shortening_is_not_enough(tmp_path):
     for made_room in [json.loads(line) for line in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8").splitlines()
                       if '"made_room"' in line]:
         assert not set(made_room["shortened"]) & set(made_room["removed"])  # Removed after shortening: counted as removed
+
+def ranking_session(tmp_path, num_ctx):
+    read = lambda path, thinking="": [chunk(thinking=thinking, tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], num_ctx=num_ctx, auto_approve_tools=["read_file_with_metadata"])
+    code_reads(mcp)
+    session.client = CountingClient([read("a.py"), read("b.py", "a_3 is where the value is set"),
+                                     read("c.py", "a_5 and b_2 call it"), read("d.py", "c_1 too"), [chunk("Done.", done=True)]])
+    asyncio.run(session.send("Read the files; a_7 matters"))
+    calls = {e.args["path"]: e for e in session.entries if e.kind == c.TOOL}
+    return {path: e.shortened or e.response for path, e in calls.items()}, calls
+
+def test_mentioned_parts_go_by_their_last_mention_before_whole_responses(tmp_path):
+    # The sizes where room is made differ a little with the test folder's path (it is in the filemap), so a range
+    seen = []
+    for num_ctx in range(6000, 7600, 100):
+        folder = tmp_path / str(num_ctx)
+        folder.mkdir()
+        texts, calls = ranking_session(folder, num_ctx)
+        kept = {name for name in ("a_3", "a_5", "a_7", "b_2", "c_1")
+                if not calls[f"{name[0]}.py"].removed and f"step 1 of {name}" in texts[f"{name[0]}.py"]}
+        if not calls["a.py"].removed:
+            assert "a_7" in kept  # The user named it: it stays as long as its response does
+        if not any(e.removed for e in calls.values()):
+            # a_3 was mentioned longest ago, then a_5 and b_2, then c_1: a part goes only after the older mentioned ones
+            mentioned = {"a_3": 1, "a_5": 2, "b_2": 2, "c_1": 3}
+            assert all(later in kept for name in kept & set(mentioned) for later in mentioned if mentioned[later] > mentioned[name])
+            seen.append(kept)
+    assert any("a_3" not in kept and "b_2" in kept for kept in seen)  # The oldest mention left out first
+    assert {"a_7", "c_1"} in seen  # Then the ones mentioned next
+    assert {"a_7"} in seen  # Only the user's left, still without removing a whole response
+
+def test_the_room_for_the_reply_grows_with_the_longest_reply(tmp_path):
+    session, _, _ = make_session(tmp_path, [], num_ctx=65536)
+    assert session._reply_room() == 8192  # An eighth of the context
+    long = chunk("x", done=True)
+    long.eval_count = 9052
+    session.client = FakeClient([[long]])
+    asyncio.run(session.send("Write"))
+    assert session._reply_room() == int(9052 * 1.5)  # Room for one and a half of the longest reply
+    session._longest_reply = 60000
+    assert session._reply_room() == 32768  # At most half the context
+    asyncio.run(session.new_conversation())
+    assert session._reply_room() == 8192
 
 def test_what_was_said_before_clear_does_not_keep_parts(tmp_path):
     session = shortening_session(tmp_path, 7500, before_clear="Tell me about a_5 and a_6")
