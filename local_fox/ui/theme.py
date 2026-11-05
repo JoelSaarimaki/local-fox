@@ -29,6 +29,7 @@ def stylesheet(font_size: int) -> str:
     QFrame#bar, QFrame#notice {{ background-color: {PANEL}; border: none; }}
     QFrame#notice {{ border-top: 1px solid {ACCENT}; }}
     QFrame#ollama {{ background-color: {PANEL}; border: 1px solid {BORDER}; border-top: none; }}
+    QWidget#ollama-buttons {{ background-color: transparent; }}
     QTreeView, QPlainTextEdit, QTextBrowser {{ background-color: {BG}; border: 1px solid {BORDER}; selection-background-color: #3a2a1a; }}
     QTreeView {{ background-color: {PANEL}; }}
     QTreeView::item:hover {{ background-color: #262626; }}

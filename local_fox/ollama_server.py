@@ -87,30 +87,44 @@ async def poll(client, timeout: float = POLL_TIMEOUT) -> State:
 
 def activity(state: State | None, model: str, phase: str | None) -> str:
     """
-    Returns the panel's short text of what the server does: Local Fox's request if one runs, otherwise what is
-    loaded. A request in progress counts as reachable, as the poll of a busy server can time out.
+    Returns the panel's short text of what the server does: Local Fox's request if one runs ("Thinking…"),
+    otherwise the server's state ("Idle", "Not running"). The model is not named, as the panel shows it on a row of
+    its own (placement). A request in progress counts as reachable, as the poll of a busy server can time out.
     """
     if phase == WAITING:
         if state and state.reachable and state.find(model):
-            return f"Reading the prompt for {model}…"
-        return f"Loading {model}…"
+            return "Reading the prompt…"
+        return "Loading the model…"
     if phase == THINKING:
-        return f"{model} is thinking…"
+        return "Thinking…"
     if phase == WRITING:
-        return f"{model} is writing…"
+        return "Writing…"
     if state is None:
         return "Checking…"
     if not state.reachable:
         return "Not running"
     if not state.answering:
         return "Not answering"
-    if not state.loaded:
-        return "Running, no model loaded"
+    return "Idle"
+
+def placement(state: State | None, model: str) -> str:
+    """
+    Returns where the model runs for the panel's model row: '77 % CPU / 23 % GPU' while it is loaded, 'not loaded'
+    when the server answered without it, and nothing when the server did not answer.
+    """
+    if not state or not state.reachable or not state.answering:
+        return ""
     current = state.find(model)
-    if current:
-        others = len(state.loaded) - 1
-        return f"{model} loaded, {current.placement()}" + (f", and {others} more" if others else "")
-    return "Loaded: " + ", ".join(item.name for item in state.loaded)
+    return current.placement() if current else "not loaded"
+
+def others_loaded(state: State | None, model: str) -> list[str]:
+    """
+    Returns the names of the other models the server has loaded, which take memory from the model too.
+    """
+    if not state:
+        return []
+    current = state.find(model)
+    return [item.name for item in state.loaded if item is not current]
 
 def normalize_host(text: str) -> str | None:
     """

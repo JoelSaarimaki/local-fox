@@ -180,12 +180,13 @@ Local Fox starts by asking for the project, before the window opens:
   folder for **Add path to prompt** (relative to the project folder, as the tools take paths) and **Copy path**.
   Forbidden files are darker, read-only files are marked `ro`, ignored folders are dimmed, and the files the AI
   changed in the session are orange.
-- **Ollama panel** below the filemap: the address of the Ollama server, and what it is doing, checked with
-  `ollama ps` every two seconds while a server is starting or a model is loading for a request, otherwise every
-  10 seconds and whenever you return to the window: "Loading flint:40b…" (the model is being loaded into memory), "Reading the prompt for flint:40b…"
-  (the long wait before a reply on the CPU), "flint:40b is thinking…" or "is writing…", and between replies
-  what is loaded and where it runs, as `ollama ps` shows it ("flint:40b loaded, 77 % CPU / 23 % GPU"). It only
-  knows Local Fox's own requests: another program's request shows as the model being loaded.
+- **Ollama panel** below the filemap: the address of the Ollama server; the model, with where it runs as
+  `ollama ps` shows it ("77 % CPU / 23 % GPU", or "not loaded"; other loaded models are in its tooltip); and what
+  the server is doing, checked with `ollama ps` every two seconds while a server is starting or a model is loading
+  for a request, otherwise every 10 seconds and whenever you return to the window: "Loading the model…" (into
+  memory), "Reading the prompt…" (the long wait before a reply on the CPU), "Thinking…", "Writing…" or "Idle". It
+  only knows Local Fox's own requests: another program's request shows as the model being loaded. A long model
+  name or address is cut with "…" (the whole of it is in the tooltip), and the panel keeps its height.
   When Ollama on this computer does not answer, it says "Not running" and has **Start Ollama server**, which runs
   `ollama serve` for the address of `ollama_host` in a window of its own, where you see what it does and can stop
   it with Ctrl+C or by closing the window: a console window on Windows, Terminal on macOS (macOS asks once

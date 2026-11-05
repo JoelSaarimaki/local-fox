@@ -20,20 +20,46 @@ GIB = 1024 ** 3
 
 def test_activity_while_local_fox_waits_for_the_model():
     # A model that is still loading is not in 'ollama ps', so a waiting request whose model is missing loads it
-    assert activity(State(True), "flint:40b", WAITING) == "Loading flint:40b…"
-    assert activity(None, "flint:40b", WAITING) == "Loading flint:40b…"
+    assert activity(State(True), "flint:40b", WAITING) == "Loading the model…"
+    assert activity(None, "flint:40b", WAITING) == "Loading the model…"
     loaded = State(True, [Loaded("flint:40b", 22 * GIB, 22 * GIB)])
-    assert activity(loaded, "flint:40b", WAITING) == "Reading the prompt for flint:40b…"
-    assert activity(loaded, "flint:40b", THINKING) == "flint:40b is thinking…"
-    assert activity(loaded, "flint:40b", WRITING) == "flint:40b is writing…"
+    assert activity(loaded, "flint:40b", WAITING) == "Reading the prompt…"
+    assert activity(loaded, "flint:40b", THINKING) == "Thinking…"
+    assert activity(loaded, "flint:40b", WRITING) == "Writing…"
 
-def test_activity_between_requests():
-    assert activity(None, "m", None) == "Checking…"
-    assert activity(State(False), "m", None) == "Not running"
-    assert activity(State(True), "m", None) == "Running, no model loaded"
+def test_activity_and_placement_between_requests():
+    assert activity(None, "m", None) == "Checking…" and ollama_server.placement(None, "m") == ""
+    assert activity(State(False), "m", None) == "Not running" and ollama_server.placement(State(False), "m") == ""
+    assert activity(State(True), "m", None) == "Idle" and ollama_server.placement(State(True), "m") == "not loaded"
     split = State(True, [Loaded("llama3.1:latest", 100, 23), Loaded("other:1b", 10, 10)])
-    assert activity(split, "llama3.1", None) == "llama3.1 loaded, 77 % CPU / 23 % GPU, and 1 more"
-    assert activity(split, "flint:40b", None) == "Loaded: llama3.1:latest, other:1b"
+    assert activity(split, "llama3.1", None) == "Idle"
+    assert ollama_server.placement(split, "llama3.1") == "77 % CPU / 23 % GPU"
+    assert ollama_server.others_loaded(split, "llama3.1") == ["other:1b"]
+    assert ollama_server.placement(split, "flint:40b") == "not loaded"
+    assert ollama_server.others_loaded(split, "flint:40b") == ["llama3.1:latest", "other:1b"]
+
+def test_the_panel_keeps_its_height_and_cuts_a_long_model_name(app):
+    from local_fox.ui.ollama_panel import OllamaPanel
+    panel = OllamaPanel()
+    panel.resize(240, panel.sizeHint().height())
+    panel.show()
+    app.processEvents()
+    panel.show_state("http://127.0.0.1:11434", "Idle", can_start=False, model="m")
+    app.processEvents()
+    narrowest = panel.minimumSizeHint().width()
+    heights = []
+    long_name = "hf.co/someone/a-very-long-model-repository-name-GGUF:Q4_K_M"
+    for can_start, can_stop, text in ((True, False, "Not running"), (False, True, "Idle"), (False, False, "Not reachable")):
+        panel.show_state("http://127.0.0.1:11434", text, can_start=can_start, can_stop=can_stop,
+                         model=long_name, placement="77 % CPU / 23 % GPU")
+        app.processEvents()
+        heights.append(panel.sizeHint().height())
+        # The long name does not widen the panel, which would widen the filemap's column
+        assert panel.minimumSizeHint().width() == narrowest and panel.status_label.full_text() == text
+    assert len(set(heights)) == 1
+    assert panel.model_label.text() != long_name and long_name in panel.model_label.toolTip()
+    assert panel.placement_label.text() == "77 % CPU / 23 % GPU"
+    panel.close()
 
 def test_poll_reads_ps_and_a_failure_is_not_reachable():
     class Client:
@@ -97,23 +123,23 @@ def test_the_panel_offers_to_start_a_local_server_that_does_not_answer(app, monk
         window.session = fake_session()
         window._ollama_state = State(False)
         window._show_ollama()
-        assert panel.status_label.text() == "Not running" and not panel.start_button.isHidden()
+        assert panel.status_label.full_text() == "Not running" and not panel.start_button.isHidden()
         assert panel.stop_button.isHidden()
         panel.start_button.click()
         assert started == [("ollama", "http://127.0.0.1:11434")]
-        assert panel.status_label.text() == "Starting…" and panel.start_button.isHidden()
+        assert panel.status_label.full_text() == "Starting…" and panel.start_button.isHidden()
         # It answers: the poll clears the start, and the panel shows the server's state
         window._ollama_state = State(True)
         window._check_serve()
         window._show_ollama()
-        assert panel.status_label.text() == "Running, no model loaded" and window._serve_started == 0
+        assert panel.status_label.full_text() == "Idle" and window._serve_started == 0
         assert "stopped when Local Fox closes" in panel.status_label.toolTip()
         # Its own server can be stopped, e.g. to run Ollama in a console instead
         process = window._serve
         assert not panel.stop_button.isHidden()
         panel.stop_button.click()
         assert process.returncode == 1 and window._serve is None
-        assert panel.stop_button.isHidden() and panel.status_label.text() == "Checking…"
+        assert panel.stop_button.isHidden() and panel.status_label.full_text() == "Checking…"
         window._ollama_state = State(False)
         window._show_ollama()
         assert not panel.start_button.isHidden()
@@ -161,11 +187,11 @@ def test_no_start_button_for_another_computer_or_while_a_request_runs(app, monke
         window.session = fake_session("http://192.168.1.20:11434")
         window._ollama_state = State(False)
         window._show_ollama()
-        assert panel.status_label.text() == "Not reachable" and panel.start_button.isHidden()
+        assert panel.status_label.full_text() == "Not reachable" and panel.start_button.isHidden()
         # A poll can time out while the server is busy with Local Fox's own request
         window.session = fake_session(phase=WAITING)
         window._show_ollama()
-        assert panel.status_label.text() == "Loading flint:40b…" and panel.start_button.isHidden()
+        assert panel.status_label.full_text() == "Loading the model…" and panel.start_button.isHidden()
     finally:
         window.session = None
         window.close()
@@ -247,7 +273,7 @@ def test_a_server_local_fox_did_not_start_is_stopped_after_confirming(app, monke
         panel.stop_button.click()  # "No"
         assert stopped == [] and "ollama.exe, process 23720" in questions[0] and "did not start it" in questions[0]
         panel.stop_button.click()  # "Yes"
-        assert stopped == [23720] and panel.status_label.text() == "Checking…"
+        assert stopped == [23720] and panel.status_label.full_text() == "Checking…"
     finally:
         window.session = None
         window.close()
@@ -283,8 +309,8 @@ def test_stopping_a_server_that_is_already_gone_offers_to_start_one(app, monkeyp
         window._show_ollama()
         assert not panel.stop_button.isHidden()
         panel.stop_button.click()
-        wait_for(lambda: panel.status_label.text() == "Not running")
-        assert panel.status_label.text() == "Not running" and not panel.start_button.isHidden()
+        wait_for(lambda: panel.status_label.full_text() == "Not running")
+        assert panel.status_label.full_text() == "Not running" and not panel.start_button.isHidden()
         assert panel.stop_button.isHidden() and errors == []
         # One that still answers but cannot be found (on Linux, a system service of another user) is an error
         answers["state"] = State(True)
@@ -343,7 +369,7 @@ def test_host_shows_and_sets_the_address_and_keeps_the_conversation(app, tmp_pat
         # The panel shows the other computer's server, which has neither button
         window._ollama_state = State(True)
         window._show_ollama()
-        assert window.ollama_panel.host_label.text() == "192.168.1.20:11434"
+        assert window.ollama_panel.host_label.full_text() == "192.168.1.20:11434"
         assert window.ollama_panel.start_button.isHidden() and window.ollama_panel.stop_button.isHidden()
         window._submit("/host not an address")
         assert "is not an address" in errors[-1] and len(hosts) == 1
@@ -393,7 +419,7 @@ def test_a_check_of_the_old_address_does_not_overwrite_the_new_ones(app):
             app.processEvents()
             clock.sleep(0.01)
         assert asked == ["http://127.0.0.1:11434", "http://127.0.0.1:11500"]
-        assert window._ollama_state == State(True) and window.ollama_panel.status_label.text() == "Running, no model loaded"
+        assert window._ollama_state == State(True) and window.ollama_panel.status_label.full_text() == "Idle"
     finally:
         window.session = None
         window.close()

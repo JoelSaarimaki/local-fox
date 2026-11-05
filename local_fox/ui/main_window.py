@@ -441,8 +441,11 @@ class MainWindow(QMainWindow):
             text = "Not reachable"
         local = ollama_server.is_local(host)
         answers = state is not None and state.reachable
+        others = ollama_server.others_loaded(state, model)
+        model_tip = "Also loaded: " + ", ".join(others) if others else ""
         self.ollama_panel.show_state(host, text, tip=tip,
-                                     can_start=down and not own and local, can_stop=own or (answers and local))
+                                     can_start=down and not own and local, can_stop=own or (answers and local),
+                                     model=model, placement=ollama_server.placement(state, model), model_tip=model_tip)
         self._pace_polls()
 
     def _pace_polls(self) -> None:
