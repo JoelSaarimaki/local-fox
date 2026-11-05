@@ -21,12 +21,12 @@ LOG_NAME = "session.jsonl"
 
 def reset(folder: Path) -> None:
     """
-    Empties the logs folder at the start of the application: the session log, the servers' logs, and the
-    per-conversation logs of earlier versions. A file another running Local Fox still writes is left as it is.
+    Empties the logs folder at the start of the application: the session log, the servers' logs, the output of
+    an 'ollama serve' started from the Ollama panel, and the per-conversation logs of earlier versions. A file another running Local Fox still writes is left as it is.
     """
     if not folder.is_dir():
         return
-    for path in [folder / LOG_NAME, *folder.glob("server-*.log")]:
+    for path in [folder / LOG_NAME, folder / "ollama-serve.log", *folder.glob("server-*.log")]:
         try:
             path.unlink(missing_ok=True)
         except OSError:

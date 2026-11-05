@@ -5,6 +5,8 @@ with what to try first, and Ollama's message after it, as it came, for the detai
 """
 import httpx
 
+from .ollama_server import is_local
+
 # Ollama's log, where a crashed runner tells why
 OLLAMA_LOG = r"%LOCALAPPDATA%\Ollama\server.log (Windows) or ~/.ollama/logs/server.log"
 
@@ -39,18 +41,28 @@ def explain(message: str, model: str, num_ctx: int) -> str:
         return f"Ollama: {message}"
     return f"{explanation}\n\nOllama's message: {message}"
 
-def explain_connection(error: Exception, host: str) -> str:
+def explain_connection(error: Exception, host: str, sent: bool = True) -> str:
     """
     Returns an explanation of a failed connection to Ollama: not running, stopped in the middle of a reply, or too slow.
+    sent is False for Local Fox's own check at the start of a conversation, which the user did not send: they are
+    not told to send again what they have not sent yet.
     """
-    if isinstance(error, httpx.ConnectError) or isinstance(error, ConnectionRefusedError):
-        explanation = (f"Ollama is not running at {host}, or not reachable. Start Ollama (the Ollama app, or 'ollama serve'), "
-                       "and ask again; check ollama_host in the settings if it runs elsewhere.")
-    elif isinstance(error, (httpx.RemoteProtocolError, httpx.ReadError)):
+    if isinstance(error, (httpx.RemoteProtocolError, httpx.ReadError, ConnectionResetError, ConnectionAbortedError)):
         explanation = ("Ollama closed the connection in the middle of the reply. It may have crashed, often for lack of "
                        f"memory, or been restarted. Ask again; Ollama's log tells why: {OLLAMA_LOG}.")
+    # The ollama library raises Python's own ConnectionError in place of httpx's ConnectError
+    elif isinstance(error, (httpx.ConnectError, ConnectionError)):
+        if is_local(host):
+            start = ("Start the Ollama app, or run 'ollama serve' in a terminal (in the window, the \"Start Ollama server\" "
+                     "button below the file list does that)")
+        else:
+            start = "Start Ollama on that computer"
+        explanation = (f"Ollama is not running at {host}, or not reachable. {start}"
+                       + (", and send your message again. " if sent else ". ")
+                       + "If Ollama runs at another address, set ollama_host in the settings.")
     elif isinstance(error, httpx.TimeoutException):
-        explanation = "Ollama did not answer in time. It may be busy loading the model; ask again in a moment."
+        explanation = "Ollama did not answer in time. It may be busy loading the model" + (
+            "; ask again in a moment." if sent else ".")
     else:
         explanation = f"The connection to Ollama at {host} failed."
     return f"{explanation}\n\nThe error: {type(error).__name__}: {error}"

@@ -57,3 +57,58 @@ def test_the_icns_icon_has_every_size(tmp_path):
         kinds.append(data[offset:offset + 4])
         offset += struct.unpack(">I", data[offset + 4:offset + 8])[0]
     assert kinds == list(logo.ICNS_TYPES.values()) and offset == len(data)
+
+# --- The Ollama panel's server on macOS and Linux (ollama_server) ---
+
+def test_macos_runs_ollama_serve_in_terminal():
+    from local_fox import ollama_server
+    command = ollama_server.terminal_command("/Applications/Ollama.app/Contents/Resources/ollama",
+                                             "http://127.0.0.1:11500", platform="darwin")
+    assert command[0] == "osascript"
+    assert command[2] == ('tell application "Terminal" to do script '
+                          '"OLLAMA_HOST=127.0.0.1:11500 /Applications/Ollama.app/Contents/Resources/ollama serve"')
+    # A path with a space is quoted for the shell, and the quotes survive AppleScript's string
+    spaced = ollama_server.terminal_command("/Users/a b/ollama", "http://localhost", platform="darwin")
+    assert "OLLAMA_HOST=localhost:11434 '/Users/a b/ollama' serve" in spaced[2]
+
+def test_linux_runs_ollama_serve_in_the_first_terminal_found_with_a_display():
+    from local_fox import ollama_server
+    found = {"konsole": "/usr/bin/konsole", "xterm": "/usr/bin/xterm"}
+    command = ollama_server.terminal_command("/usr/local/bin/ollama", "http://127.0.0.1:11434", platform="linux",
+                                             which=found.get, environ={"WAYLAND_DISPLAY": "wayland-0"})
+    assert command[:4] == ["/usr/bin/konsole", "-e", "sh", "-c"]
+    assert command[4].startswith("OLLAMA_HOST=127.0.0.1:11434 /usr/local/bin/ollama serve; ")
+    assert ollama_server.STOPPED_NOTE in command[4]  # An error stays readable instead of the window closing
+    # No display (a server over SSH), or no terminal: none, and the server runs hidden with its log
+    assert ollama_server.terminal_command("ollama", "http://127.0.0.1:11434", platform="linux", which=found.get,
+                                          environ={}) is None
+    assert ollama_server.terminal_command("ollama", "http://127.0.0.1:11434", platform="linux", which=lambda name: None,
+                                          environ={"DISPLAY": ":0"}) is None
+
+def test_a_server_in_a_terminal_is_followed_by_its_port(monkeypatch):
+    from types import SimpleNamespace
+
+    from local_fox import ollama_server
+    launcher = SimpleNamespace(poll=lambda: 0, returncode=0)  # osascript and gnome-terminal end at once
+    server = ollama_server.TerminalServer(11434, launcher)
+    listening = {"pid": None}
+    alive = {7: True}
+    monkeypatch.setattr(ollama_server, "listening_pid", lambda port: listening["pid"])
+    monkeypatch.setattr(ollama_server, "process_name", lambda pid: "ollama")
+    monkeypatch.setattr(ollama_server, "_alive", lambda pid: alive.get(pid, False))
+    assert server.poll() is None  # Starting: the launcher's exit 0 is no failure
+    listening["pid"] = 7
+    assert server.poll() is None and server.pid == 7
+    signals = []
+    monkeypatch.setattr(ollama_server.os, "kill", lambda pid, number: signals.append((pid, number)) or alive.pop(pid))
+    ollama_server.stop(server)
+    assert signals == [(7, ollama_server.signal.SIGTERM)] and server.poll() == 0
+
+def test_linux_finds_the_server_with_ss_when_lsof_is_missing(monkeypatch):
+    from local_fox import ollama_server
+    monkeypatch.setattr(sys, "platform", "linux")
+    outputs = {"lsof": "", "ss": 'LISTEN 0 4096 127.0.0.1:11434 0.0.0.0:* users:(("ollama",pid=1234,fd=3))\n'}
+    monkeypatch.setattr(ollama_server, "_run", lambda command: outputs[command[0]])
+    assert ollama_server.listening_pid(11434) == 1234
+    assert "sudo systemctl stop ollama" in ollama_server.not_found_hint("linux")
+    assert "systemctl" not in ollama_server.not_found_hint("darwin")

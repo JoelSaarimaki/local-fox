@@ -148,8 +148,8 @@ Local Fox starts by asking for the project, before the window opens:
 ## The window
 
 - **Top bar**: the version, the model (click to switch), the context size (click to choose another for the session,
-  from 4 096 tokens doubled up to the model's maximum; `/context <size>` sets any other),
-  and where the model runs (`ollama ps`). **Export** and the ≡ menu with the other commands are on the right.
+  from 4 096 tokens doubled up to the model's maximum; `/context <size>` sets any other).
+  **Export** and the ≡ menu with the other commands are on the right.
 - **Bottom bar**: **Clear** and **Help** on the left, and on the right how much of the context the conversation
   uses and **Send** (**Stop** while the model runs), far apart so that one is not pressed for the other. The
   filemap reaches down to it; the prompt is as wide as the feed above it.
@@ -157,6 +157,28 @@ Local Fox starts by asking for the project, before the window opens:
   folder for **Add path to prompt** (relative to the project folder, as the tools take paths) and **Copy path**.
   Forbidden files are darker, read-only files are marked `ro`, ignored folders are dimmed, and the files the AI
   changed in the session are orange.
+- **Ollama panel** below the filemap: the address of the Ollama server, and what it is doing, checked with
+  `ollama ps` every two seconds while a server is starting or a model is loading for a request, otherwise every
+  30 seconds and whenever you return to the window: "Loading flint:40b…" (the model is being loaded into memory), "Reading the prompt for flint:40b…"
+  (the long wait before a reply on the CPU), "flint:40b is thinking…" or "is writing…", and between replies
+  what is loaded and where it runs, as `ollama ps` shows it ("flint:40b loaded, 77 % CPU / 23 % GPU"). It only
+  knows Local Fox's own requests: another program's request shows as the model being loaded.
+  When Ollama on this computer does not answer, it says "Not running" and has **Start Ollama server**, which runs
+  `ollama serve` for the address of `ollama_host` in a window of its own, where you see what it does and can stop
+  it with Ctrl+C or by closing the window: a console window on Windows, Terminal on macOS (macOS asks once
+  whether Local Fox may control Terminal), and on Linux the first of gnome-terminal, konsole, xfce4-terminal,
+  x-terminal-emulator and xterm that is installed. Without a display or a terminal, on Linux, it runs hidden, with
+  its output in `logs/ollama-serve.log`. It runs until Local Fox closes. Nothing starts it but the button; to keep Ollama running without Local Fox, start the
+  Ollama app instead. A server that takes the connection but does not answer within 5 seconds shows as
+  "Not answering".
+  While an Ollama server of this computer runs, the panel has **Stop Ollama server**, e.g. to run `ollama serve`
+  in a console of your own and see its output. Ollama has no command that stops its server (`ollama stop` only
+  unloads a model), and a server running hidden has no console for Ctrl+C, so its process is ended: the one
+  listening at the address's port, and only if it is Ollama. A server that Local Fox did not start is stopped
+  after you confirm it, as other programs that use it lose it too; one that the Ollama app started may be
+  started again by the app, so quit the app from its icon instead. On Linux, Ollama's installer sets the server
+  up as a system service that runs as another user, which Local Fox cannot stop: use `sudo systemctl stop ollama`. Whatever the server was doing ends with it:
+  a reply in progress fails, and an `ollama pull` continues where it was when run again.
 - **Add path to allowed**, **Add path to read-only** and **Add path to forbidden** in the filemap's menu add the
   path to `allowed_paths` (inside a forbidden folder),
   `read_only_files` or `forbidden_paths` of the project's tools config, or remove it from there. Only you make
@@ -219,7 +241,8 @@ The prompt history is in the same folder, and the logs in its `logs` folder.
 
 Local Fox keeps one log of the current run: `logs/session.jsonl` next to `config.json`, one JSON object per line,
 written as it happens, with every conversation of the run (each clear starts a new one with a `conversation`
-line). The output of the MCP servers (their stderr) is in `logs/server-<key>.log`. **Every start of Local Fox
+line). The output of the MCP servers (their stderr) is in `logs/server-<key>.log`, and that of an Ollama server
+started with **Start Ollama server** without a terminal (Linux without a display) in `logs/ollama-serve.log`. **Every start of Local Fox
 empties them**, so after something goes wrong the log is right there and holds only that run; save a copy before
 starting again if you need it. `/log` opens the `logs` folder (**Open config folder** in the ≡ menu, the folder
 it is in).
@@ -281,7 +304,7 @@ recognizes these:
 | The model ran out of memory (GPU or system) | A smaller context, closing other programs that use the GPU, or a smaller model |
 | The model's runner process stopped | Often memory as well; where Ollama's log is |
 | The model took too long to load | Asking again; a smaller context or model if it repeats |
-| Ollama is not running or not reachable | Starting Ollama; checking `ollama_host` |
+| Ollama is not running or not reachable | Starting the Ollama app, running `ollama serve`, or **Start Ollama server** below the filemap; checking `ollama_host`. When it answers again, a notice under the error says so, after the model's check that failed is done again |
 | Ollama closed the connection in the middle of a reply | Asking again; Ollama's log |
 | The model is not installed, cannot call tools, or cannot think | `ollama pull`, another model, or the `think` setting |
 | The tools' server stopped | **Restart tools and clear**; its log in `logs/server-<key>.log` (the model is told not to call tools until then) |

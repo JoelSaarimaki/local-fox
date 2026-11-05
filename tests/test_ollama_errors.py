@@ -25,3 +25,37 @@ def test_unknown_errors_are_shown_as_they_are():
 def test_connection_errors():
     assert "not running" in explain_connection(httpx.ConnectError("refused"), "http://127.0.0.1:11434")
     assert "closed the connection in the middle of the reply" in explain_connection(httpx.RemoteProtocolError("peer closed"), "h")
+
+def test_the_ollama_library_s_connection_error_says_how_to_start_ollama():
+    # The ollama library raises Python's own ConnectionError for a refused connection, not httpx's ConnectError,
+    # so it got only "The connection to Ollama failed."
+    error = ConnectionError("Failed to connect to Ollama. Please check that Ollama is downloaded, running and accessible.")
+    text = explain_connection(error, "http://127.0.0.1:11434")
+    assert "not running" in text and "'ollama serve'" in text and '"Start Ollama server"' in text
+    remote = explain_connection(error, "http://192.168.1.20:11434")
+    assert "Start Ollama on that computer" in remote and "ollama serve" not in remote.split("The error:")[0]
+    assert "middle of the reply" in explain_connection(ConnectionResetError("reset"), "http://127.0.0.1:11434")
+    assert "send your message again" in text
+
+def test_the_check_at_the_start_does_not_ask_to_send_again():
+    # The model's check at the start of a conversation fails before the user has sent anything
+    error = ConnectionError("Failed to connect to Ollama")
+    text = explain_connection(error, "http://127.0.0.1:11434", sent=False)
+    assert "not running" in text and "'ollama serve'" in text
+    assert "send your message again" not in text and "ask again" not in text
+    assert "ask again" not in explain_connection(httpx.ReadTimeout("slow"), "h", sent=False)
+
+def test_a_session_started_without_ollama_does_not_ask_to_send_again(tmp_path):
+    import asyncio
+
+    from local_fox import config
+    from local_fox.session import Session
+    (tmp_path / ".local-fox").mkdir()
+    session = Session(dict(config.DEFAULTS), tmp_path, log_dir=tmp_path / "logs")
+
+    class Down:
+        async def show(self, model):
+            raise ConnectionError("Failed to connect to Ollama")
+    session.client = Down()
+    error = asyncio.run(session.load_model_info())
+    assert "not running" in error and "send your message again" not in error

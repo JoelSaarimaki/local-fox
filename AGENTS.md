@@ -51,6 +51,11 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   every tool call and response, error responses, thinking. Every part of `Session.messages` must have an `Entry`.
 - **No hidden automation**: Local Fox never sends a message on its own (no "Continue." after a stall, no silent
   retries). Decisions go through `Frontend.decide()` and the user chooses.
+  The same goes for Ollama: `ollama serve` starts only from the panel's "Start Ollama server" button (`MainWindow._start_ollama`),
+  never on its own or after a failed request, and the server it started is stopped when the window closes.
+  "Stop Ollama server" stops any Ollama server of this computer at the address (the user may want a visible one
+  in a console instead of a hidden one): found by its port (`ollama_server.other_server`), only if the program
+  is Ollama, and after the user confirms it when Local Fox did not start it.
 - **Every tool call gets a response**, including unknown names, broken JSON, missing arguments, skipped and stopped calls.
 - **Settings in one place**: `config.json` (`local_fox/config.py`). A new setting needs a default in `DEFAULTS`,
   a help text in `DESCRIPTIONS` (the settings view shows it; a test checks every setting has one), a check in
@@ -131,10 +136,11 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 | `local_fox/recent_projects.py` | The recent projects of the start dialog |
 | `local_fox/conversation.py` | `Entry`, the feed's data, and what is read from the entries: out-of-date and named reads, repeated calls, loops (`repeating`) |
 | `local_fox/ollama_errors.py` | Ollama's errors explained for the feed, with what to try first |
+| `local_fox/ollama_server.py` | The Ollama panel's data: polling `ollama ps`, the activity text, starting and stopping `ollama serve` |
 | `local_fox/shell_path.py` | macOS: the login shell's PATH, added at the start |
 | `local_fox/config.py`, `export.py`, `cli.py` | Settings, Markdown export, the command line for testing the core |
 | `local_fox/__main__.py` | The entry point of the window and the executable; `--tools-server` runs the bundled tools instead |
-| `local_fox/ui/` | The window: `app.py` (the start), `project_dialog.py`, `main_window.py`, `settings_view.py`, `feed.py` + `render.py` (HTML), `filemap_view.py`, `prompt.py`, `bridge.py`, `theme.py` (the palette and stylesheets), `logo.py` (the fox and the icons) |
+| `local_fox/ui/` | The window: `app.py` (the start), `project_dialog.py`, `main_window.py`, `settings_view.py`, `feed.py` + `render.py` (HTML), `filemap_view.py`, `ollama_panel.py`, `prompt.py`, `bridge.py`, `theme.py` (the palette and stylesheets), `logo.py` (the fox and the icons) |
 | `tools/compare.py` | Runs ollmcp-generic-tools' comparison scenarios through the core |
 | `packaging/local_fox.spec`, `build.ps1`, `build.sh` | The executable (Windows), the application (macOS, Linux) |
 | `tests/` | Unit tests with a fake Ollama client and fake MCP servers |
@@ -176,7 +182,11 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   and an exception in a Qt slot disappears without a trace (test the window's code paths, as below).
   It has no console either, so a console program started under it opens a console window of its own: the tools
   start every program with `CREATE_NO_WINDOW` (`NO_WINDOW` in their `common.py`). Run from source, under python.exe's
-  hidden console, no windows appear, so check this with the built executable.
+  hidden console, no windows appear, so check this with the built executable. The one deliberate exception is
+  the `ollama serve` of "Start Ollama server", which the user should see and be able to stop: a console window of
+  its own on Windows (`CREATE_NEW_CONSOLE`), Terminal on macOS and a terminal on Linux (`ollama_server.terminal_command`,
+  followed by its port as `TerminalServer`, as the terminal runs it, not Local Fox); hidden with a log only without a terminal.
+  The macOS and Linux paths are tested only by simulation (`tests/test_macos.py`).
 - **PyInstaller**: `collect_submodules("mcp")` must leave out `mcp.cli` (it calls `sys.exit` on import); `mcp.server`
   is needed by the bundled tools. The tools import their toolsets by name, so the spec collects `ollmcp_tools`'
   submodules, its data files (the setup templates), its metadata (the version in the feed) and the tree-sitter

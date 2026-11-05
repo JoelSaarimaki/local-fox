@@ -272,6 +272,59 @@ def test_stopped_reply_is_marked_for_the_model(tmp_path):
     assert reply.text == "Half an ans" + STOPPED_MARK  # In the feed as the model gets it
     assert session.messages[-1] == {"role": "assistant", "content": "Half an ans" + STOPPED_MARK}
 
+def test_the_phase_of_the_request_is_followed_for_the_ollama_panel(tmp_path):
+    from local_fox.ollama_server import THINKING, WAITING, WRITING
+    session, client, _ = make_session(tmp_path, [])
+    seen = []
+
+    async def chat(**kwargs):
+        seen.append(session.phase)  # Sent, nothing back yet
+        async def stream():
+            yield chunk(thinking="Hmm")
+            seen.append(session.phase)
+            yield chunk("Answer", done=True)
+            seen.append(session.phase)
+        return stream()
+    client.chat = chat
+    asyncio.run(session.send("Q"))
+    assert seen == [WAITING, THINKING, WRITING]
+    assert session.phase is None
+
+def test_a_failed_request_ends_its_phase(tmp_path):
+    session, client, _ = make_session(tmp_path, [])
+
+    async def chat(**kwargs):
+        raise ConnectionError("Failed to connect to Ollama")
+    client.chat = chat
+    asyncio.run(session.send("Q"))
+    assert session.phase is None
+    error = next(e for e in session.entries if e.kind == c.ERROR)
+    assert "not running" in error.text
+
+def test_a_server_that_answers_again_is_noted_under_the_error(tmp_path):
+    session, client, _ = make_session(tmp_path, [])
+    asyncio.run(session.server_back())  # No error was shown: nothing to note
+    assert not [e for e in session.entries if e.kind == c.NOTICE and "answers now" in e.text]
+
+    async def down(model):
+        raise ConnectionError("Failed to connect to Ollama")
+    client.show = down
+    assert "not running" in asyncio.run(session.load_model_info())
+    assert session.capabilities is None and session.connection_failed
+
+    async def up(model):
+        return SimpleNamespace(capabilities=["completion", "tools", "thinking"],
+                               modelinfo={"llama.context_length": 131072})
+    client.show = up
+    asyncio.run(session.server_back())
+    notices = [e.text for e in session.entries if e.kind == c.NOTICE and "answers now" in e.text]
+    assert notices == ["Ollama answers now at http://127.0.0.1:11434. flint:40b is ready."]
+    # The model was checked again, which the failed check at the start had left undone
+    assert "thinking" in session.capabilities and session.max_context == 131072
+    asyncio.run(session.server_back())  # Once only
+    assert len([e for e in session.entries if e.kind == c.NOTICE and "answers now" in e.text]) == 1
+    assert not any(m.get("content", "").startswith("Ollama answers now") for m in session.messages)  # Not for the model
+
 def test_conversation_is_saved_and_reopened(tmp_path):
     from local_fox import saved_conversations
     session, client, _ = make_session(tmp_path, [[chunk(thinking="hmm"), chunk("", tool_calls=[call("read_file_with_metadata", {"path": "a.py"})], done=True)],

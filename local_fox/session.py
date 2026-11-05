@@ -21,6 +21,7 @@ from .config import data_dir, without_secrets
 from .conversation import Entry, call_text, estimate_tokens, format_number, main_argument, named_reads, same_call, superseded
 from .filemap import Rules, instructions_path, model_filemap, tools_config_path
 from .mcp_servers import Servers
+from . import ollama_server
 from .ollama_errors import explain, explain_connection
 from .session_log import LOG_NAME, SessionLog
 
@@ -111,8 +112,10 @@ class Session:
         self.changed_files: set[Path] = set()
         self.used_tokens = 0
         self.running = False
+        self.phase: str | None = None  # Where the request to Ollama is (ollama_server.WAITING …), for the Ollama panel
         self.capabilities: list[str] | None = None
         self.max_context: int | None = None
+        self.connection_failed = False  # The feed showed that Ollama could not be reached (server_back)
         self._instructions = ""
         self._filemap = ""
         self._task: asyncio.Task | None = None
@@ -269,13 +272,34 @@ class Session:
         except ollama.ResponseError as error:
             return explain(error.error, self.model, self.num_ctx)
         except (httpx.HTTPError, ConnectionError) as error:
-            return explain_connection(error, self.config["ollama_host"])
+            self.connection_failed = True
+            return explain_connection(error, self.config["ollama_host"], sent=False)  # No message of the user's
+        self.connection_failed = False
         self.capabilities = list(info.capabilities or [])
         for key, value in (info.modelinfo or {}).items():
             if key.endswith(".context_length") and isinstance(value, int):
                 self.max_context = value
         self.frontend.status()
         return None
+
+    async def server_back(self) -> None:
+        """
+        Called by the window when the Ollama server answers again after it did not. If the feed showed that it
+        could not be reached, the model is checked again if that check failed (without it, thinking is not turned
+        on, images are refused and the largest context is unknown until a clear), and a notice under the error
+        says that Ollama answers now. Nothing is sent to the model.
+        """
+        if not self.connection_failed:
+            return
+        self.connection_failed = False
+        error = await self.load_model_info() if self.capabilities is None else None
+        host = self.config["ollama_host"]
+        self.log.write("ollama_back", host=host, error=error)
+        if error:
+            self.error(error)
+            return
+        self.notice(f"Ollama answers now at {host}. {self.model} is ready.")
+        self.frontend.status()
 
     async def new_conversation(self) -> None:
         """
@@ -506,23 +530,19 @@ class Session:
     async def list_models(self) -> list[str]:
         return sorted(m.model for m in (await self.client.list()).models)
 
-    async def placement(self) -> str:
+    async def server_state(self) -> ollama_server.State:
         """
-        Returns where the model runs, as 'ollama ps' shows it: '77 % CPU / 23 % GPU', or 'not loaded'.
+        Returns what the Ollama server has loaded, or that it does not answer, for the Ollama panel.
         """
-        try:
-            loaded = (await self.client.ps()).models
-        except Exception:
-            return "Ollama not reachable"
-        for model in loaded:
-            if model.model == self.model or model.name == self.model:
-                if not model.size:
-                    return "loaded"
-                gpu = round(100 * (model.size_vram or 0) / model.size)
-                if gpu >= 100:
-                    return "100 % GPU"
-                return "100 % CPU" if gpu <= 0 else f"{100 - gpu} % CPU / {gpu} % GPU"
-        return "not loaded"
+        return await ollama_server.poll(self.client)
+
+    def _set_phase(self, phase: str | None) -> None:
+        """
+        Notes where the request to Ollama is, and tells the window when it changes.
+        """
+        if phase != self.phase:
+            self.phase = phase
+            self.frontend.status()
 
     def think_setting(self):
         think = self.config.get("think")
@@ -806,17 +826,20 @@ class Session:
         def log_reply(**fields):
             self.log.write("reply", content=entry.text, thinking=entry.thinking or None, done_reason=entry.stop_reason,
                            seconds=round(time.monotonic() - started, 2), **counts, **fields)
+        self._set_phase(ollama_server.WAITING)
         try:
             stream = await self.client.chat(model=self.model, messages=self.messages, tools=tools,
                                             options=self._options(), think=think, stream=True)
             async for chunk in stream:
                 message = chunk.message
                 if message.thinking:
+                    self._set_phase(ollama_server.THINKING)
                     if not entry.thinking:
                         self._open_latest(THINKING, entry)
                     entry.thinking += message.thinking
                     loop = "\n" in message.thinking and c.repeating(entry.thinking)
                 if message.content:
+                    self._set_phase(ollama_server.WRITING)
                     if not entry.text:
                         self._open_latest(ANSWER, entry)
                     entry.text += message.content
@@ -852,8 +875,11 @@ class Session:
             entry.streaming = False
             self._update(entry)
             log_reply(error=str(error))
+            self.connection_failed = True
             self.error(explain_connection(error, self.config["ollama_host"]))
             return None
+        finally:
+            self._set_phase(None)
         entry.streaming = False
         if loop:
             return await self._stop_repeating(stream, entry, calls, log_reply)

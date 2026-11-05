@@ -1,11 +1,13 @@
 """
-The window: the top bar, the filemap on the left, the feed in the middle, and the notice bar and the prompt
-input at the bottom.
+The window: the top bar, the filemap and the Ollama panel on the left, the feed in the middle, and the notice bar
+and the prompt input at the bottom.
 """
+import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QFileSystemWatcher, Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, QFileSystemWatcher, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QSplitter, QToolTip,
@@ -14,7 +16,7 @@ from PySide6.QtWidgets import (QFileDialog, QFrame, QHBoxLayout, QInputDialog, Q
 from .. import APP_NAME, __version__
 from .. import config as config_module
 from .. import conversation as c
-from .. import recent_projects, saved_conversations, tools_config, tools_setup
+from .. import ollama_server, recent_projects, saved_conversations, tools_config, tools_setup
 from ..conversation import format_number
 from ..export import to_markdown
 from ..filemap import Rules, tools_config_path
@@ -24,6 +26,7 @@ from . import theme
 from .bridge import AsyncRunner, Bridge, QtFrontend
 from .feed import Feed
 from .filemap_view import FilemapView
+from .ollama_panel import OllamaPanel
 from .project_dialog import choose_project
 from .prompt import PromptInput
 from .settings_view import SettingsDialog, context_sizes
@@ -49,6 +52,11 @@ REOPEN = "Reopen it"
 # Closes a notice's bar without its actions. Only notices get it: a question the session waits on (an approval, the
 # step limit) is answered with one of its own options, and the notice stays in the feed either way.
 DISMISS = "Dismiss"
+# How often the Ollama panel asks the server what it has loaded ('ollama ps', a line in the server's console each
+# time): often only while the answer is about to change, a server starting or a model loading for a request, and
+# otherwise seldom, with a check whenever the window becomes active again (_pace_polls)
+FAST_POLL_MS = 2000
+SLOW_POLL_MS = 30000
 
 def _button(text: str, slot, name: str = "", tip: str = "") -> QPushButton:
     button = QPushButton(text)
@@ -75,7 +83,10 @@ class MainWindow(QMainWindow):
         self._decision = None   # The future of the decision the notice bar shows
         self._turn = None       # The future of the turn sent last, so that a second Enter cannot send before it starts
         self._reopen_offer: Path | None = None  # The conversation the notice bar offers to reopen
-        self._placement_pending = False
+        self._poll_pending = False
+        self._ollama_state: ollama_server.State | None = None  # The latest poll of the Ollama server
+        self._serve = None               # The 'ollama serve' Local Fox started on the user's click, stopped at the close
+        self._serve_started = 0.0        # When it was started, while it has not answered yet (0 when it has)
         self.setWindowTitle(APP_NAME)
         self.resize(1400, 900)
 
@@ -103,10 +114,8 @@ class MainWindow(QMainWindow):
         self.context_button = _button("", self._ask_context, "flat", "The context size: click to change it for this session")
         self.usage_label = QLabel("", objectName="dim")
         self.usage_label.setToolTip("How much of the context the conversation uses")
-        self.placement_label = QLabel("", objectName="dim")
-        self.placement_label.setToolTip("Where the model runs, as 'ollama ps' shows it")
         self.project_label = QLabel("", objectName="dim")
-        for widget in (title, self.model_button, self.context_button, self.placement_label):
+        for widget in (title, self.model_button, self.context_button):
             top.addWidget(widget)
             top.addSpacing(10)
         top.addStretch(1)
@@ -128,9 +137,19 @@ class MainWindow(QMainWindow):
         top.addWidget(_button("Export", self._export, tip="Save the conversation as Markdown (/export)"))
         top.addWidget(menu_button)
 
-        # The filemap on the left, down to the bottom bar, and the feed, the notice bar and the prompt on the right
+        # The filemap and the Ollama panel on the left, down to the bottom bar, and the feed, the notice bar and the
+        # prompt on the right
         self.filemap = FilemapView()
         self.filemap.full_paths = settings.get("prompt_full_paths", False)
+        self.ollama_panel = OllamaPanel()
+        self.ollama_panel.start_clicked.connect(self._start_ollama)
+        self.ollama_panel.stop_clicked.connect(self._stop_ollama)
+        files = QWidget()
+        files_column = QVBoxLayout(files)
+        files_column.setContentsMargins(0, 0, 0, 0)
+        files_column.setSpacing(0)
+        files_column.addWidget(self.filemap, 1)
+        files_column.addWidget(self.ollama_panel)
         self.feed = Feed(font)
 
         # The notice bar, for approvals and other decisions
@@ -164,7 +183,7 @@ class MainWindow(QMainWindow):
         column.addWidget(self.notice_bar)
         column.addWidget(self.prompt)
         splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(self.filemap)
+        splitter.addWidget(files)
         splitter.addWidget(conversation)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([300, 1100])
@@ -200,10 +219,11 @@ class MainWindow(QMainWindow):
         self.bridge.decision.connect(self._on_decision)
         self.bridge.decision_done.connect(self._on_decision_done)
 
-        self.placement_timer = QTimer(self)
-        self.placement_timer.setInterval(4000)
-        self.placement_timer.timeout.connect(self._poll_placement)
-        self.placement_timer.start()
+        # The Ollama panel's checks of the server, paced by _pace_polls
+        self.ollama_timer = QTimer(self)
+        self.ollama_timer.setInterval(SLOW_POLL_MS)
+        self.ollama_timer.timeout.connect(self._poll_ollama)
+        self.ollama_timer.start()
 
         # The open project's tools config, edited by hand: the feed offers to restart the tools
         self._config_notified: str | None = None
@@ -270,6 +290,7 @@ class MainWindow(QMainWindow):
 
         def started(_):
             self._update_status()
+            self._poll_ollama()  # Not after the slow interval: the panel would say "Checking…" until then
             if self._config_error:
                 self._local_error(f"config.json: {self._config_error}\nThe defaults are used until it is fixed.")
                 self._config_error = None
@@ -359,17 +380,179 @@ class MainWindow(QMainWindow):
             running = False
         self.send_button.setText("Stop" if running else "Send")
         self.send_button.setToolTip("Stop the model (Esc)" if running else "Send (Enter)")
+        self._show_ollama()
 
-    def _poll_placement(self) -> None:
-        if not self.session or self._placement_pending:
+    # --- The Ollama panel ---
+
+    def _poll_ollama(self) -> None:
+        """
+        Asks the Ollama server what it has loaded, in the session's loop, and shows it in the panel.
+        """
+        if not self.session or self._poll_pending:
             return
-        self._placement_pending = True
+        self._poll_pending = True
 
-        def done(text):
-            self._placement_pending = False
-            self.placement_label.setText(text)
-        future = self.runner.submit(self.session.placement())
-        future.add_done_callback(lambda f: self._later(lambda: done(f.result() if not f.exception() else "")))
+        def done(state):
+            self._poll_pending = False
+            before = self._ollama_state
+            self._ollama_state = state
+            if state.reachable and state.answering and not (before and before.reachable) and self.session:
+                self._run(self.session.server_back())  # A notice under the error, if one was shown
+            self._check_serve()
+            self._show_ollama()
+        future = self.runner.submit(self.session.server_state())
+        future.add_done_callback(lambda f: self._later(
+            lambda: done(f.result() if not f.exception() else ollama_server.State(False))))
+
+    def _show_ollama(self) -> None:
+        """
+        Shows the server's address and what it does: Local Fox's request while one runs, otherwise the poll's
+        result, with the start button for a server of this computer that does not answer, and the stop button
+        for one that does (or that Local Fox started).
+        """
+        s = self.session
+        host = s.config["ollama_host"] if s else self.settings["ollama_host"]
+        model = s.model if s else self.settings["model"]
+        state = self._ollama_state
+        text = ollama_server.activity(state, model, s.phase if s else None)
+        down = state is not None and not state.reachable and not (s and s.phase)
+        tip = ""
+        own = self._serve is not None and self._serve.poll() is None
+        if own:
+            tip = "Started by Local Fox ('ollama serve'), stopped when Local Fox closes. " + (
+                "Its output is in its window." if getattr(self._serve, "visible", False) else
+                f"Its output: {config_module.data_dir() / 'logs' / ollama_server.LOG_NAME}")
+        if down and self._serve_started:
+            text, down = "Starting…", False
+        elif down and not ollama_server.is_local(host):
+            text = "Not reachable"
+        local = ollama_server.is_local(host)
+        answers = state is not None and state.reachable
+        self.ollama_panel.show_state(host, text, tip=tip,
+                                     can_start=down and not own and local, can_stop=own or (answers and local))
+        self._pace_polls()
+
+    def _pace_polls(self) -> None:
+        """
+        Checks the server every FAST_POLL_MS while a server Local Fox started has not answered yet or Local Fox's
+        request waits for its first reply (a model loading shows only in 'ollama ps'), and every SLOW_POLL_MS
+        otherwise. A change of pace checks at once: the request that ends has just loaded its model.
+        """
+        s = self.session
+        fast = bool(self._serve_started) or bool(s and s.phase == ollama_server.WAITING)
+        interval = FAST_POLL_MS if fast else SLOW_POLL_MS
+        if interval != self.ollama_timer.interval():
+            self.ollama_timer.setInterval(interval)  # Starts the interval again
+            self._poll_ollama()
+
+    def changeEvent(self, event) -> None:
+        """
+        Checks the Ollama server when the window becomes active again: between the seldom checks, a server may
+        have been started or stopped elsewhere while the user was away.
+        """
+        super().changeEvent(event)
+        if event.type() == QEvent.ActivationChange and self.isActiveWindow():
+            self._poll_ollama()
+
+    def _stop_ollama(self) -> None:
+        """
+        Stops the Ollama server at the address, on the user's click on "Stop Ollama server", e.g. to run it in a
+        console of their own: the one Local Fox started at once, any other (the Ollama app's, a console's, or one
+        running hidden) after the user confirmed it. A request in progress then fails, and the feed says so.
+        """
+        serve, self._serve, self._serve_started = self._serve, None, 0.0
+        log = self.session.log if self.session else None
+        if serve and serve.poll() is None:
+            ollama_server.stop(serve)
+            if log:
+                self.runner.call(lambda: log.write("ollama_serve_stopped", pid=serve.pid))
+        else:
+            host = self.session.config["ollama_host"] if self.session else self.settings["ollama_host"]
+            other = ollama_server.other_server(host)
+            if not other:
+                self._local_error(f"No Ollama server was found listening at {host} on this computer, so nothing was "
+                                  f"stopped. {ollama_server.not_found_hint()}")
+                return
+            answer = QMessageBox.question(
+                self, "Stop the Ollama server?",
+                f"Stop the Ollama server at {host} ({other.name}, process {other.pid})?\n\nLocal Fox did not start it, "
+                "so other programs that use it lose it too. If the Ollama app started it, the app may start it again: "
+                "quit the app from its icon instead.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if answer != QMessageBox.Yes:
+                return
+            error = ollama_server.stop_other(other)
+            if log:
+                self.runner.call(lambda: log.write("ollama_server_stopped", pid=other.pid, program=other.name, error=error))
+            if error:
+                self._local_error(f"The Ollama server (process {other.pid}) was not stopped: {error}\n"
+                                  f"{ollama_server.not_found_hint()}")
+                return
+        self._ollama_state = None  # "Checking…" until the next poll tells
+        self._show_ollama()
+        self._poll_ollama()
+
+    def _start_ollama(self) -> None:
+        """
+        Starts 'ollama serve' for the address of the settings, on the user's click on "Start Ollama server".
+        """
+        host = self.session.config["ollama_host"] if self.session else self.settings["ollama_host"]
+        program = ollama_server.find_ollama()
+        if not program:
+            self._local_error("Ollama was not found on this computer. Install it from ollama.com, then choose "
+                              "\"Start Ollama server\" again.")
+            return
+        logs = config_module.data_dir() / "logs"
+        try:
+            self._serve = ollama_server.start(program, host, logs)
+        except OSError as error:
+            self._local_error(f"'ollama serve' did not start: {error}")
+            return
+        self._serve_started = time.monotonic()
+        if self.session:
+            log, pid = self.session.log, self._serve.pid
+            self.runner.call(lambda: log.write("ollama_serve", program=program, host=host, pid=pid))
+        self._show_ollama()
+        self._poll_ollama()
+
+    def _check_serve(self) -> None:
+        """
+        Follows a server Local Fox started until it answers, and tells if it stopped or did not answer in time.
+        """
+        if not self._serve_started:
+            return
+        state = self._ollama_state
+        if state and state.reachable:
+            self._serve_started = 0.0
+            return
+        serve = self._serve
+        terminal = isinstance(serve, ollama_server.TerminalServer)
+        if serve.poll() is not None:
+            if terminal and serve.pid is None:
+                self._serve_started = 0.0
+                self._local_error("The terminal window for 'ollama serve' could not be opened" + (
+                    ". Allow Local Fox to control Terminal in System Settings, Privacy & Security, Automation, and "
+                    "try again, or run 'ollama serve' in a terminal yourself." if sys.platform == "darwin" else
+                    ": run 'ollama serve' in a terminal yourself."))
+                return
+            reason = f"it stopped with exit code {serve.returncode}"
+        elif time.monotonic() - self._serve_started > 30:
+            reason = "it did not answer within 30 seconds"
+        else:
+            return
+        self._serve_started = 0.0
+        if terminal:
+            # The terminal window stays open with what the server said
+            self._local_error(f"'ollama serve' did not start: {reason}. Its terminal window tells why.")
+            return
+        if getattr(serve, "visible", False):
+            # Its console window closed with it, so what it said is gone; a terminal of the user's own keeps it
+            self._local_error(f"'ollama serve' did not start: {reason}. To see why, run 'ollama serve' in a terminal.")
+            return
+        logs = config_module.data_dir() / "logs"
+        tail = ollama_server.log_tail(logs)
+        self._local_error(f"'ollama serve' did not start: {reason}. Its output is in {logs / ollama_server.LOG_NAME}"
+                          + (f":\n{tail}" if tail else "."))
 
     # --- The notice bar ---
 
@@ -530,7 +713,7 @@ class MainWindow(QMainWindow):
             else:
                 await session.new_conversation()
         self._hide_notice()
-        self._run(clear())
+        self._run(clear(), lambda _: self._poll_ollama())  # The settings may have another Ollama address
 
     def _reload_instructions(self) -> None:
         if self.session:
@@ -810,6 +993,8 @@ class MainWindow(QMainWindow):
     # --- Closing ---
 
     def closeEvent(self, event) -> None:
+        self.ollama_timer.stop()
+        ollama_server.stop(self._serve)
         if self.session:
             future = self.runner.submit(self.session.close())
             try:
