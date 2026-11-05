@@ -251,3 +251,48 @@ def test_a_server_local_fox_did_not_start_is_stopped_after_confirming(app, monke
     finally:
         window.session = None
         window.close()
+
+def test_stopping_a_server_that_is_already_gone_offers_to_start_one(app, monkeypatch):
+    # Started and stopped outside Local Fox since the last check: the panel still had "Stop Ollama server"
+    import time as clock
+
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow(dict(config.DEFAULTS))
+    errors = []
+    monkeypatch.setattr(window, "_local_error", errors.append)
+    monkeypatch.setattr(ollama_server, "other_server", lambda host: None)
+    answers = {"state": State(False)}
+
+    async def server_state():
+        return answers["state"]
+    panel = window.ollama_panel
+
+    def wait_for(condition):
+        end = clock.monotonic() + 5
+        while not condition() and clock.monotonic() < end:
+            app.processEvents()
+            clock.sleep(0.01)
+    try:
+        window.session = fake_session()
+        window.session.server_state = server_state
+
+        async def server_back():
+            pass
+        window.session.server_back = server_back
+        window._ollama_state = State(True)
+        window._show_ollama()
+        assert not panel.stop_button.isHidden()
+        panel.stop_button.click()
+        wait_for(lambda: panel.status_label.text() == "Not running")
+        assert panel.status_label.text() == "Not running" and not panel.start_button.isHidden()
+        assert panel.stop_button.isHidden() and errors == []
+        # One that still answers but cannot be found (on Linux, a system service of another user) is an error
+        answers["state"] = State(True)
+        window._ollama_state = State(True)
+        window._show_ollama()
+        panel.stop_button.click()
+        wait_for(lambda: errors)
+        assert len(errors) == 1 and "No Ollama server was found" in errors[0]
+    finally:
+        window.session = None
+        window.close()

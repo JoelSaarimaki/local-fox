@@ -56,7 +56,7 @@ DISMISS = "Dismiss"
 # time): often only while the answer is about to change, a server starting or a model loading for a request, and
 # otherwise seldom, with a check whenever the window becomes active again (_pace_polls)
 FAST_POLL_MS = 2000
-SLOW_POLL_MS = 30000
+SLOW_POLL_MS = 10000
 
 def _button(text: str, slot, name: str = "", tip: str = "") -> QPushButton:
     button = QPushButton(text)
@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
         self._turn = None       # The future of the turn sent last, so that a second Enter cannot send before it starts
         self._reopen_offer: Path | None = None  # The conversation the notice bar offers to reopen
         self._poll_pending = False
+        self._after_poll = []  # Called with the result of the poll on its way (_poll_ollama's then)
         self._ollama_state: ollama_server.State | None = None  # The latest poll of the Ollama server
         self._serve = None               # The 'ollama serve' Local Fox started on the user's click, stopped at the close
         self._serve_started = 0.0        # When it was started, while it has not answered yet (0 when it has)
@@ -384,10 +385,13 @@ class MainWindow(QMainWindow):
 
     # --- The Ollama panel ---
 
-    def _poll_ollama(self) -> None:
+    def _poll_ollama(self, then=None) -> None:
         """
-        Asks the Ollama server what it has loaded, in the session's loop, and shows it in the panel.
+        Asks the Ollama server what it has loaded, in the session's loop, and shows it in the panel. then, if
+        given, is called with the result, also when a poll already on its way gives it.
         """
+        if then:
+            self._after_poll.append(then)
         if not self.session or self._poll_pending:
             return
         self._poll_pending = True
@@ -400,6 +404,9 @@ class MainWindow(QMainWindow):
                 self._run(self.session.server_back())  # A notice under the error, if one was shown
             self._check_serve()
             self._show_ollama()
+            callbacks, self._after_poll = self._after_poll, []
+            for callback in callbacks:
+                callback(state)
         future = self.runner.submit(self.session.server_state())
         future.add_done_callback(lambda f: self._later(
             lambda: done(f.result() if not f.exception() else ollama_server.State(False))))
@@ -470,8 +477,15 @@ class MainWindow(QMainWindow):
             host = self.session.config["ollama_host"] if self.session else self.settings["ollama_host"]
             other = ollama_server.other_server(host)
             if not other:
-                self._local_error(f"No Ollama server was found listening at {host} on this computer, so nothing was "
-                                  f"stopped. {ollama_server.not_found_hint()}")
+                # Most often it was stopped elsewhere since the last check: the panel is checked again and then
+                # offers to start one. Only a server that still answers is one that could not be found.
+                def recheck(state):
+                    if state.reachable:
+                        self._local_error(f"No Ollama server was found listening at {host} on this computer, so "
+                                          f"nothing was stopped. {ollama_server.not_found_hint()}")
+                self._ollama_state = None  # "Checking…", without buttons, until the check tells
+                self._show_ollama()
+                self._poll_ollama(recheck)
                 return
             answer = QMessageBox.question(
                 self, "Stop the Ollama server?",

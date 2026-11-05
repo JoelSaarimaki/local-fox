@@ -159,7 +159,7 @@ Local Fox starts by asking for the project, before the window opens:
   changed in the session are orange.
 - **Ollama panel** below the filemap: the address of the Ollama server, and what it is doing, checked with
   `ollama ps` every two seconds while a server is starting or a model is loading for a request, otherwise every
-  30 seconds and whenever you return to the window: "Loading flint:40b…" (the model is being loaded into memory), "Reading the prompt for flint:40b…"
+  10 seconds and whenever you return to the window: "Loading flint:40b…" (the model is being loaded into memory), "Reading the prompt for flint:40b…"
   (the long wait before a reply on the CPU), "flint:40b is thinking…" or "is writing…", and between replies
   what is loaded and where it runs, as `ollama ps` shows it ("flint:40b loaded, 77 % CPU / 23 % GPU"). It only
   knows Local Fox's own requests: another program's request shows as the model being loaded.
