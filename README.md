@@ -216,6 +216,11 @@ Local Fox starts by asking for the project, before the window opens:
   prompts are always shown whole. This also keeps a long conversation quick to show.
 - **Notice bar**: approvals of tool calls (**Allow**, **Allow all for this session**, **Skip**, **Stop**) and
   other decisions, such as **Larger context** when a reply stopped because the context was full.
+- **Auto mode**, the checkbox beside **Send**: tool calls run without asking, and the questions that would pause
+  a running turn (the `max_steps` limit, repeated reads of shortened or removed responses) are answered
+  **Continue**, shown in the feed as a notice. Ticked while such a question waits, it answers it. It never sends a
+  message: a turn you stop, an error, a full context or a reply stopped for repeating itself still ends the turn.
+  It is off at every start.
 - **Prompt**: Enter sends, Shift + Enter adds a line, Up and Down recall sent messages, Esc stops the model.
   **There is no queue**: while the model runs, Enter does not send (the button is **Stop**); the message stays
   in the input, and a tooltip says to stop the model (Esc) or wait. Stopping and then pressing Enter sends it.
@@ -284,7 +289,7 @@ Unlike the export, the log is written without asking and holds what the feed doe
 | `context_note` | The note added to a tool response when the context fills or room was made |
 | `cut` | Ollama's count of a request dropped without a removal, in a request that could have overflowed the context: it cut the conversation, and the turn stopped |
 | `smaller_count` | Ollama's count dropped in a request far from filling the context: not a cut, but the model's chat template counting less (llama3.1 sends the tool definitions only with your message) |
-| `decision` | A question to the user, the options and the choice |
+| `decision` | A question to the user, the options and the choice; `auto` if auto mode answered it |
 | `reopen` | A saved conversation reopened: its file and how many entries and messages it had |
 | `notice`, `error`, `setting`, `close` | The notices and errors of the feed, model and context changes, the end |
 

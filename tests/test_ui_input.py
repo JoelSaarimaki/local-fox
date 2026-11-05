@@ -210,6 +210,29 @@ def test_a_notice_can_be_dismissed_but_a_question_cannot(app):
         window.session = None
         window.close()
 
+def test_auto_mode_answers_a_waiting_question_it_covers(app):
+    import asyncio
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow(dict(config.DEFAULTS))
+    loop, runner = asyncio.new_event_loop(), window.runner
+    try:
+        window.session = SimpleNamespace(entries=[], rules=None, auto=False)
+        window.runner = SimpleNamespace(call=lambda f: f())
+        notice = loop.create_future()
+        window._on_decision("The context is full.", ["Clear", "Larger context"], 0, notice)
+        window.auto_check.setChecked(True)
+        assert window.session.auto and not notice.done() and not window.notice_bar.isHidden()  # Not one auto mode answers
+        window.auto_check.setChecked(False)
+        approval = loop.create_future()
+        window._on_decision("Run edit_file?", ["Allow", "Allow all for this session", "Skip", "Stop"], 0, approval)
+        window.auto_check.click()
+        assert approval.result() == "Allow" and window.notice_bar.isHidden()
+    finally:
+        loop.close()
+        window.runner = runner
+        window.session = None
+        window.close()
+
 def test_a_reply_with_only_tool_calls_leaves_no_gap(app):
     # The reply streams in ("…"), ends without text, and the tool call comes after it
     tool = lambda: c.Entry(c.TOOL, tool="read_file_with_metadata", args={"path": "a.py"}, response="x", status=c.OK, collapsed=True)

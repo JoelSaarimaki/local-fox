@@ -50,7 +50,11 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 - **Everything that goes to the model is visible** in the feed: the instructions, the filemap, the tool definitions,
   every tool call and response, error responses, thinking. Every part of `Session.messages` must have an `Entry`.
 - **No hidden automation**: Local Fox never sends a message on its own (no "Continue." after a stall, no silent
-  retries). Decisions go through `Frontend.decide()` and the user chooses.
+  retries). Decisions go through `Frontend.decide()` and the user chooses. The one exception is the user's own
+  choice: auto mode (the checkbox beside "Send", `Session.auto`, off at every start) answers a decision that has
+  an option of `AUTO_ANSWERS` ("Allow", "Continue") with it, logged with `auto` and, for "Continue", shown as a
+  notice. It answers only questions inside a running turn; it never sends a message, so a stop, an error or a
+  full context still ends the turn. Don't widen it to other options (e.g. "Larger context") without asking.
   The same goes for Ollama: `ollama serve` starts only from the panel's "Start Ollama server" button (`MainWindow._start_ollama`),
   never on its own or after a failed request, and the server it started is stopped when the window closes.
   "Stop Ollama server" stops any Ollama server of this computer at the address (the user may want a visible one

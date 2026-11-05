@@ -12,7 +12,7 @@ import pytest
 from local_fox import config
 from local_fox import conversation as c
 from local_fox.mcp_servers import Servers, ServerTool
-from local_fox.session import CUT_OFF_MARK, REPEATING_MARK, SKIPPED_RESPONSE, STOPPED_BEFORE, STOPPED_MARK, Frontend, Session
+from local_fox.session import CUT_OFF_MARK, REPEATING_MARK, SKIPPED_RESPONSE, STOPPED_BEFORE, STOPPED_MARK, Frontend, Session, auto_choice
 
 SCHEMA = {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}
 
@@ -156,6 +156,18 @@ def test_step_limit_asks_to_continue(tmp_path):
     asyncio.run(session.send("Read"))
     assert len(client.requests) == 2
     assert "limit" in session.frontend.questions[-1]
+
+def test_auto_mode_allows_calls_and_continues_but_does_not_answer_other_questions(tmp_path):
+    read = [chunk(tool_calls=[call("read_file_with_metadata", {"path": "a.py"})], done=True)]
+    session, client, mcp = make_session(tmp_path, [read, read, read, [chunk("done", done=True)]], max_steps=2)
+    session.auto = True
+    asyncio.run(session.send("Read"))
+    assert session.frontend.questions == [] and len(mcp.calls) == 3 and len(client.requests) == 4
+    assert not session.allow_all  # Turning auto mode off asks again
+    assert any(e.kind == c.NOTICE and e.text.startswith('Auto mode answered "Continue"') for e in session.entries)
+    log = (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
+    assert '"auto": true' in log
+    assert auto_choice(["Clear", "Export", "Larger context"]) is None and auto_choice(["Continue", "Stop"]) == "Continue"
 
 def test_changed_files_are_tracked(tmp_path):
     session, _, _ = make_session(tmp_path, [[chunk(tool_calls=[call("edit_file", {"path": "a.py"})], done=True)],

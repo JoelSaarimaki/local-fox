@@ -29,6 +29,8 @@ from .session_log import LOG_NAME, SessionLog
 WRITE_TOOLS = {"write_file", "edit_file", "move_file", "delete_file", "restore_file"}
 RESTART_TOOLS = "Restart tools and clear"  # The action that restarts the MCP servers (the window does it)
 APPROVAL_OPTIONS = ["Allow", "Allow all for this session", "Skip", "Stop"]
+# The answers auto mode gives (auto_choice): a tool call runs, and a question that pauses the turn continues it
+AUTO_ANSWERS = ("Allow", "Continue")
 SKIPPED_RESPONSE = "The user skipped this call."
 STOPPED_BEFORE = "The user stopped the session before this call ran."
 # Added to a reply that did not end on its own, in the feed and in the history the model gets, so that neither
@@ -99,6 +101,12 @@ def is_error(text: str) -> bool:
     """
     return text.startswith(("Error", "Unknown tool")) or '"success": false' in text
 
+def auto_choice(options: list[str]) -> str | None:
+    """
+    Returns the answer auto mode gives to a decision with these options, or None if it leaves it to the user.
+    """
+    return next((o for o in AUTO_ANSWERS if o in options), None)
+
 class Session:
     def __init__(self, config: dict, project: Path, frontend: Frontend | None = None, extra_env: dict | None = None,
                  log_dir: Path | None = None):
@@ -115,6 +123,7 @@ class Session:
         self.entries: list[Entry] = []
         self.messages: list[dict] = []
         self.allow_all = False
+        self.auto = False  # Auto mode, the window's checkbox: decisions with an AUTO_ANSWERS option answer themselves
         self.changed_files: set[Path] = set()
         self.used_tokens = 0
         self.running = False
@@ -854,8 +863,16 @@ class Session:
 
     async def _decide(self, question: str, options: list[str], entry: Entry | None) -> str:
         """
-        Asks the user through the frontend, and logs the answer.
+        Asks the user through the frontend, and logs the answer. In auto mode, a question with an answer of
+        AUTO_ANSWERS is answered with it without asking; a "Continue" is also shown in the feed, as it lets the turn go
+        on past a point where it would have paused (a tool call shows itself).
         """
+        choice = auto_choice(options) if self.auto else None
+        if choice:
+            self.log.write("decision", question=question, options=options, choice=choice, auto=True)
+            if choice == "Continue":
+                self.notice(f"Auto mode answered \"Continue\": {question}")
+            return choice
         try:
             choice = await self.frontend.decide(question, options, entry)
         except asyncio.CancelledError:

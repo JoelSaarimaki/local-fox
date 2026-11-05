@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QEvent, QFileSystemWatcher, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QFont, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
+from PySide6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QSplitter, QToolTip,
                                QToolButton, QVBoxLayout, QWidget)
 
@@ -20,7 +20,7 @@ from .. import ollama_server, recent_projects, saved_conversations, tools_config
 from ..conversation import format_number
 from ..export import to_markdown
 from ..filemap import Rules, tools_config_path
-from ..session import RESTART_TOOLS, Session
+from ..session import RESTART_TOOLS, Session, auto_choice
 from ..session_log import LOG_NAME
 from . import theme
 from .bridge import AsyncRunner, Bridge, QtFrontend
@@ -82,6 +82,8 @@ class MainWindow(QMainWindow):
         self.bridge = Bridge()
         self.session: Session | None = None
         self._decision = None   # The future of the decision the notice bar shows
+        self._decision_options: list[str] = []
+        self._choose = None     # Answers the decision the notice bar shows
         self._turn = None       # The future of the turn sent last, so that a second Enter cannot send before it starts
         self._reopen_offer: Path | None = None  # The conversation the notice bar offers to reopen
         self._poll_pending = False
@@ -200,6 +202,15 @@ class MainWindow(QMainWindow):
         bottom_row.addStretch(1)
         bottom_row.addWidget(self.usage_label)
         bottom_row.addSpacing(24)
+        # Auto mode, off at every start: the model works without pausing for approvals and "Continue" questions
+        self.auto_check = QCheckBox("Auto mode")
+        self.auto_check.setCursor(Qt.PointingHandCursor)
+        self.auto_check.setToolTip(
+            "Run tool calls without asking, and answer \"Continue\" when the model would pause, e.g. at the step limit.\n"
+            "The turn still ends when you stop it, on an error, or when the context is full. Never sends a message.")
+        self.auto_check.toggled.connect(lambda on: self._set_auto(on))
+        bottom_row.addWidget(self.auto_check)
+        bottom_row.addSpacing(12)
         self.send_button = _button("Send", self._send_clicked, "primary")
         bottom_row.addWidget(self.send_button)
 
@@ -279,6 +290,7 @@ class MainWindow(QMainWindow):
             self.runner.submit(old.close())
             self.session = None
         self.session = Session(self.settings, project, QtFrontend(self.bridge))
+        self.session.auto = self.auto_check.isChecked()
         self.project_label.setText(project.name)
         self.project_label.setToolTip(str(project))
         self.setWindowTitle(f"{APP_NAME} — {project.name}")
@@ -597,6 +609,7 @@ class MainWindow(QMainWindow):
         self._clear_notice_buttons()
         self.notice_bar.hide()
         self._decision = None
+        self._choose = None
 
     def _on_decision(self, question: str, options: list, entry_id: int, future) -> None:
         self._decision = future
@@ -607,7 +620,19 @@ class MainWindow(QMainWindow):
                 self.runner.call(lambda: future.done() or future.set_result(option))
             self._hide_notice()
         self._show_notice(question, options, choose)
+        self._decision_options, self._choose = list(options), choose
         self.feed.scroll_to_bottom()
+
+    def _set_auto(self, on: bool) -> None:
+        """
+        Turns auto mode on or off for the session. Turned on while a question it would answer waits, it answers it.
+        """
+        if self.session:
+            self.session.auto = on
+        if on and self._decision is not None and self._choose:
+            choice = auto_choice(self._decision_options)
+            if choice:
+                self._choose(choice)
 
     def _on_decision_done(self, future) -> None:
         if self._decision is future:
