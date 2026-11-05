@@ -87,6 +87,29 @@ the same, with these differences:
 - **An unsigned application**: macOS blocks a built `LocalFox.app` at its first start, as it is not signed by an
   identified developer. Open it once with right-click → "Open", or run it from the source.
 
+### Ollama on another computer
+
+The model can run on another computer of your network, e.g. one with a larger GPU, while Local Fox and the
+project stay on yours: only the requests to the model go there, and the tools still run here.
+
+1.  **On the other computer**, install Ollama, pull the model, and make Ollama listen on the network. By default it
+    accepts only connections from the same computer (127.0.0.1); the environment variable `OLLAMA_HOST=0.0.0.0`
+    opens it to the network. Set it before Ollama starts, and start Ollama again:
+    - **In a terminal**, for one run: `OLLAMA_HOST=0.0.0.0 ollama serve` (macOS, Linux), or in PowerShell
+      `$env:OLLAMA_HOST="0.0.0.0"; ollama serve` (Windows).
+    - **For the Ollama app**: on Windows `setx OLLAMA_HOST 0.0.0.0`, then quit and start the app; on macOS
+      `launchctl setenv OLLAMA_HOST "0.0.0.0"`, then quit and start the app.
+    - **For the Linux service**: `sudo systemctl edit ollama`, add `[Service]` and `Environment="OLLAMA_HOST=0.0.0.0"`,
+      then `sudo systemctl restart ollama`.
+
+    Allow incoming connections to TCP port 11434 in its firewall.
+2.  **In Local Fox**, type `/host` with the other computer's address, e.g. `/host 192.168.1.20` (the port 11434 is
+    added), or set `ollama_host` in the settings. It applies at once, and the conversation stays. The Ollama panel
+    shows the other computer's server; it has no start or stop button, as those work only for a server on your
+    computer.
+
+Ollama has no passwords: anyone who can reach that port can use the server. Open it only on a network you trust.
+
 ### Choosing the project
 
 Local Fox starts by asking for the project, before the window opens:
@@ -200,7 +223,7 @@ Local Fox starts by asking for the project, before the window opens:
   in. Pasting into the prompt only inserts the text, whatever it contains (line breaks, a leading `/`): only
   Enter typed by you sends. The filemap's **Copy path** and **Add path to prompt** are the only other ways.
 
-Commands: `/clear`, `/export`, `/instructions`, `/model [name]`, `/context [size]`, `/settings`, `/config`,
+Commands: `/clear`, `/export`, `/instructions`, `/model [name]`, `/context [size]`, `/host [address]`, `/settings`, `/config`,
 `/log`, `/setup`, `/reopen`, `/project`, `/help`.
 
 ## Settings
@@ -210,7 +233,7 @@ on macOS and `~/.config/LocalFox` on Linux (or where `LOCAL_FOX_CONFIG` points);
 a clear reads it again.
 
 **The settings view** (`/settings`, or **Settings** in the ≡ menu) shows the same file as a form, with what each
-setting does. **Save** writes it: the model and context size apply at once, the others from the next clear.
+setting does. **Save** writes it: the model, context size and Ollama address apply at once, the others from the next clear.
 **Save and clear** applies them all at once. Its **Project tools** tab shows the open project's tools config
 (`.local-fox/tools-config.json`) the same way; settings it does not know are kept, and a saved change asks
 to restart the tools (Save and clear restarts them). The tools' own rules are checked by the tools: a server
@@ -220,7 +243,7 @@ that does not start with the new config shows its error in the feed.
 
 | Setting | Default | |
 |---|---|---|
-| `ollama_host` | `http://127.0.0.1:11434` | Where Ollama runs |
+| `ollama_host` | `http://127.0.0.1:11434` | Where Ollama runs; another computer's address for Ollama there (see [Ollama on another computer](#ollama-on-another-computer)). Applies at once; also set by `/host` |
 | `ollama_api_key` | empty | Your Ollama API key for the web tools (search and fetch through ollama.com; create one at ollama.com/settings/keys). Empty: the web tools are not offered (a key in the tools' own `~/.ollmcp-tools/user-config.json` is not used). Given only to the tools' server when it starts, never to the model, and not written to the log; hidden in the settings view |
 | `model` | `flint:40b` | Also set by the model menu |
 | `num_ctx` | `65536` | The context size sent with every request; with flint:40b a larger one needs little memory |

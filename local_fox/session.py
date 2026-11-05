@@ -518,6 +518,18 @@ class Session:
             self.capabilities = None
         self.num_ctx = config["num_ctx"]
 
+    async def set_host(self, host: str) -> str | None:
+        """
+        Talks to the Ollama server at another address from now on, e.g. one on another computer, and checks the
+        model there again. The conversation stays: the server only runs the model. Returns the check's error.
+        """
+        self.config["ollama_host"] = host
+        self.client = ollama.AsyncClient(host=host)
+        error = await self.load_model_info()
+        self.log.write("setting", ollama_host=host, error=error)
+        self.frontend.status()
+        return error
+
     async def set_model(self, model: str) -> str | None:
         self.model = model
         self._tokens_per_char, self._last_prompt_tokens = 1 / 3.2, 0  # Another tokenizer

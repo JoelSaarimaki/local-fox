@@ -673,3 +673,22 @@ def test_a_loop_is_found_in_a_long_reply():
 def test_the_same_code_written_again_and_again_is_a_loop():
     draft = "Here is the code:\n```python\ndef refresh(self):\n    self.figure.update(self.plot_config)\n    self.label.configure(text=self.label_text)\n```\n"
     assert not c.repeating(draft * 5) and c.repeating(draft * 12)
+
+def test_another_ollama_address_keeps_the_conversation_and_checks_the_model_there(tmp_path, monkeypatch):
+    session, _, _ = make_session(tmp_path, [])
+    entries, messages = list(session.entries), list(session.messages)
+    asked = []
+
+    class Remote:
+        def __init__(self, host):
+            self.host = host
+
+        async def show(self, model):
+            asked.append((self.host, model))
+            return SimpleNamespace(capabilities=["completion", "tools", "thinking"], modelinfo={"qwen.context_length": 262144})
+    import local_fox.session as session_module
+    monkeypatch.setattr(session_module.ollama, "AsyncClient", Remote)
+    assert asyncio.run(session.set_host("http://192.168.1.20:11434")) is None
+    assert session.client.host == "http://192.168.1.20:11434" and session.config["ollama_host"] == "http://192.168.1.20:11434"
+    assert asked == [("http://192.168.1.20:11434", "flint:40b")] and session.max_context == 262144
+    assert session.entries == entries and session.messages == messages  # The conversation stays

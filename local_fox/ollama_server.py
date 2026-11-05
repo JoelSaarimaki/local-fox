@@ -112,6 +112,30 @@ def activity(state: State | None, model: str, phase: str | None) -> str:
         return f"{model} loaded, {current.placement()}" + (f", and {others} more" if others else "")
     return "Loaded: " + ", ".join(item.name for item in state.loaded)
 
+def normalize_host(text: str) -> str | None:
+    """
+    Returns the address as Local Fox stores it, 'http://192.168.1.20:11434', from what the user typed:
+    '192.168.1.20', '192.168.1.20:11434' or a whole URL. A plain http address gets Ollama's default port. None for
+    text that is not an address.
+    """
+    text = text.strip()
+    if not text or any(c.isspace() for c in text):
+        return None
+    # The slashes are stripped only after the scheme: "http://" would otherwise become the address "http:"
+    scheme, _, rest = text.rpartition("://")
+    text = f"{scheme or 'http'}://{rest.rstrip('/')}"
+    try:
+        parts = urlsplit(text)
+        port = parts.port
+    except ValueError:  # A port that is not a number
+        return None
+    if parts.scheme not in ("http", "https") or not parts.hostname or parts.path or parts.query \
+            or parts.netloc.endswith(":"):
+        return None
+    if port is None and parts.scheme == "http":
+        text = f"{text}:{DEFAULT_PORT}"
+    return text
+
 def is_local(host: str) -> bool:
     """
     Whether the address is this computer, where 'ollama serve' can be started.

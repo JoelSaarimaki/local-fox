@@ -296,3 +296,104 @@ def test_stopping_a_server_that_is_already_gone_offers_to_start_one(app, monkeyp
     finally:
         window.session = None
         window.close()
+
+# --- Ollama on another computer: /host and the setting ---
+
+def test_an_address_is_completed_as_typed():
+    normalize = ollama_server.normalize_host
+    assert normalize("192.168.1.20") == "http://192.168.1.20:11434"
+    assert normalize("192.168.1.20:11500") == "http://192.168.1.20:11500"
+    assert normalize(" http://gpu-box.local/ ") == "http://gpu-box.local:11434"
+    assert normalize("https://ollama.example.org") == "https://ollama.example.org"  # A proxy's own port
+    for text in ("", "not an address", "ftp://x", "192.168.1.20:port", "http://x/api", "http://"):
+        assert normalize(text) is None, text
+
+def test_host_shows_and_sets_the_address_and_keeps_the_conversation(app, tmp_path, monkeypatch):
+    import json
+    import time as clock
+
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow(dict(config.DEFAULTS))
+    notices, errors, hosts = [], [], []
+    monkeypatch.setattr(window, "_local_notice", notices.append)
+    monkeypatch.setattr(window, "_local_error", errors.append)
+    monkeypatch.setattr(window, "_poll_ollama", lambda then=None: None)
+
+    def wait_for(condition):
+        end = clock.monotonic() + 5
+        while not condition() and clock.monotonic() < end:
+            app.processEvents()
+            clock.sleep(0.01)
+    try:
+        session = fake_session()
+
+        async def set_host(host):
+            hosts.append(host)
+            session.config["ollama_host"] = host
+            return None
+        session.set_host = set_host
+        window.session = session
+        window._submit("/host")
+        assert "The Ollama address is http://127.0.0.1:11434" in notices[-1]
+        window._submit("/host 192.168.1.20")
+        wait_for(lambda: hosts and "now" in notices[-1])
+        assert hosts == ["http://192.168.1.20:11434"] and notices[-1] == "The Ollama address is now http://192.168.1.20:11434."
+        saved = json.loads(Path(os.environ["LOCAL_FOX_CONFIG"]).read_text(encoding="utf-8"))
+        assert saved["ollama_host"] == "http://192.168.1.20:11434" and window.settings["ollama_host"] == saved["ollama_host"]
+        # The panel shows the other computer's server, which has neither button
+        window._ollama_state = State(True)
+        window._show_ollama()
+        assert window.ollama_panel.host_label.text() == "192.168.1.20:11434"
+        assert window.ollama_panel.start_button.isHidden() and window.ollama_panel.stop_button.isHidden()
+        window._submit("/host not an address")
+        assert "is not an address" in errors[-1] and len(hosts) == 1
+        session.running = True
+        window._submit("/host 192.168.1.30")
+        assert "Stop the model" in errors[-1] and len(hosts) == 1
+        session.running = False
+        # The settings view's plain "Save" applies a new address at once too, without a clear
+        window._settings_saved({**window.settings, "ollama_host": "http://192.168.1.40:11434"}, False, False)
+        wait_for(lambda: len(hosts) == 2)
+        assert hosts[-1] == "http://192.168.1.40:11434"
+    finally:
+        window.session = None
+        window.close()
+
+def test_a_check_of_the_old_address_does_not_overwrite_the_new_ones(app):
+    # The panel said "Not running" for a server that answered: a check sent before /host returned after it
+    import asyncio
+    import time as clock
+
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow(dict(config.DEFAULTS))
+    asked = []
+
+    def server_state():
+        # The address is the one when the check is sent, as the session's client has it then
+        asked.append(window.session.config["ollama_host"])
+        first = len(asked) == 1
+
+        async def check():
+            if first:
+                await asyncio.sleep(0.2)  # On its way while the address changes
+                return State(False)
+            return State(True)
+        return check()
+
+    async def server_back():
+        pass
+    try:
+        session = fake_session()
+        session.server_state, session.server_back = server_state, server_back
+        window.session = session
+        window._poll_ollama()
+        session.config["ollama_host"] = "http://127.0.0.1:11500"
+        end = clock.monotonic() + 5
+        while len(asked) < 2 and clock.monotonic() < end or window._poll_pending:
+            app.processEvents()
+            clock.sleep(0.01)
+        assert asked == ["http://127.0.0.1:11434", "http://127.0.0.1:11500"]
+        assert window._ollama_state == State(True) and window.ollama_panel.status_label.text() == "Running, no model loaded"
+    finally:
+        window.session = None
+        window.close()

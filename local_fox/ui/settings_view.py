@@ -1,9 +1,9 @@
 """
 The settings view: the settings of config.json as a form, with the help text of each, in a dialog that the
 ≡ menu and /settings open. It edits the same file as a text editor would: Save writes all the settings to
-config.json after checking them as a start does (config.validate); the model and context size apply at once,
-as from their menus, and the others from the next clear, as the settings read from the file do. Save and
-clear applies them all at once.
+config.json after checking them as a start does (config.validate); the model, context size and Ollama address
+apply at once, as from their menus and /host, and the others from the next clear, as the settings read from the
+file do. Save and clear applies them all at once.
 
 The form is built from config.DEFAULTS, so a new setting shows up in it without changes here; only a setting
 whose default does not tell its type (null) needs a kind in KINDS, or it is edited as JSON.
@@ -325,7 +325,7 @@ class SettingsDialog(QDialog):
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(self.reject)
         save = QPushButton("Save")
-        save.setToolTip("Write config.json; the model and context size apply now, the others from the next clear")
+        save.setToolTip("Write config.json; the model, context size and Ollama address apply now, the others from the next clear")
         save.clicked.connect(lambda: self._save(False))
         save_clear = QPushButton("Save and clear", objectName="primary")
         save_clear.setToolTip("Write config.json and start a new session with the settings")

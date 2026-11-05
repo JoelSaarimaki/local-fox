@@ -36,7 +36,8 @@ REMOVED = {"session_log", "session_log_days", "tool_calls_collapsed", "project_d
 
 # What each setting does, shown in the settings view. Every setting of DEFAULTS has one.
 DESCRIPTIONS = {
-    "ollama_host": "Where Ollama runs.",
+    "ollama_host": "Where Ollama runs, e.g. http://192.168.1.20:11434 for another computer, whose Ollama must then "
+                   "listen on the network (OLLAMA_HOST=0.0.0.0 there). Applies at once; also set by /host.",
     "ollama_api_key": "Your Ollama API key, for the web tools (web search and fetch through ollama.com); empty: the web tools are "
                       "not offered, also if the tools' own user config file has a key. Create one at ollama.com/settings/keys. It is given only to the tools' server, never to the "
                       "model, and applies when the tools restart (\"Restart tools and clear\", or opening the project again).",

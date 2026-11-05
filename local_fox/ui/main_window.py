@@ -37,6 +37,7 @@ HELP = f"""Commands:
 /instructions     read the project instructions (.local-fox/instructions.md) again after editing them
 /model [name]     show the installed models, or switch to one
 /context [size]   show the context size and how much the conversation uses, or set the size for this session
+/host [address]   show the Ollama address, or set it, e.g. /host 192.168.1.20 for Ollama on another computer
 /settings         show the settings of config.json
 /config           open the folder of config.json; a clear reads it again
 /log              open the folder of the log of this run
@@ -395,9 +396,14 @@ class MainWindow(QMainWindow):
         if not self.session or self._poll_pending:
             return
         self._poll_pending = True
+        asked = self.session.config["ollama_host"]
 
         def done(state):
             self._poll_pending = False
+            if self.session and self.session.config["ollama_host"] != asked:
+                # The address changed (/host) while this was on its way: it tells of the old server
+                self._poll_ollama()
+                return
             before = self._ollama_state
             self._ollama_state = state
             if state.reachable and state.answering and not (before and before.reachable) and self.session:
@@ -663,7 +669,8 @@ class MainWindow(QMainWindow):
             handler = {
                 "/clear": lambda a: self._clear(), "/export": lambda a: self._export(),
                 "/instructions": lambda a: self._reload_instructions(), "/model": self._model_command,
-                "/context": self._context_command, "/config": lambda a: self._open_config(), "/log": lambda a: self._open_log(),
+                "/context": self._context_command, "/host": self._host_command,
+                "/config": lambda a: self._open_config(), "/log": lambda a: self._open_log(),
                 "/settings": lambda a: self._open_settings(), "/setup": lambda a: self._set_up(),
                 "/reopen": lambda a: self._reopen_latest(),
                 "/project": lambda a: self._open_project(), "/help": lambda a: self._local_notice(HELP),
@@ -793,6 +800,8 @@ class MainWindow(QMainWindow):
             self._switch_model(settings["model"])  # As the model menu does, so that a clear keeps it
         if self.session and settings["num_ctx"] != previous.get("num_ctx"):
             self._set_context(settings["num_ctx"])
+        if self.session and settings["ollama_host"] != self.session.config["ollama_host"]:
+            self._set_host(settings["ollama_host"])  # At once, as the conversation does not depend on the server
         self._local_notice("The settings were saved to config.json. The model and context size apply now, the others "
                            "from the next clear (/clear), and the font size from the next start.")
 
@@ -965,6 +974,47 @@ class MainWindow(QMainWindow):
         else:
             self._run(self.session.list_models(),
                       lambda models: self._local_notice(f"The model is {self.session.model}. Installed: {', '.join(models)}. Switch with /model <name>."))
+
+    def _host_command(self, argument: str) -> None:
+        """
+        /host shows the Ollama address; /host <address> sets it, e.g. to a server on another computer.
+        """
+        if not self.session:
+            return
+        if argument:
+            self._set_host(argument)
+        else:
+            self._local_notice(f"The Ollama address is {self.session.config['ollama_host']}. Change it with /host "
+                               "<address>, e.g. /host 192.168.1.20 for Ollama on another computer.")
+
+    def _set_host(self, text: str) -> None:
+        """
+        Talks to Ollama at another address from now on and saves it to config.json, keeping the conversation:
+        from /host, and from the settings view's "Save". The panel shows the new server, and the model is checked
+        there again.
+        """
+        if not self.session:
+            return
+        host = ollama_server.normalize_host(text)
+        if not host:
+            self._local_error(f"{text} is not an address. Give it as e.g. 192.168.1.20, 192.168.1.20:11434 or "
+                              "http://192.168.1.20:11434.")
+            return
+        if self.session.running:
+            self._local_error("Stop the model before changing the Ollama address.")
+            return
+        session = self.session
+
+        def changed(error):
+            config_module.save_setting("ollama_host", host)
+            self.settings["ollama_host"] = host
+            self._local_notice(f"The Ollama address is now {host}.")
+            if error:
+                self._local_error(error)
+            self._show_ollama()
+            self._poll_ollama()
+        self._ollama_state = None  # "Checking…" for the new address, not the old server's state
+        self._run(session.set_host(host), changed)
 
     def _context_command(self, argument: str) -> None:
         if not self.session:
