@@ -62,19 +62,27 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   `validate()` if it is not a plain bool/int/str, and a row in the README's settings table. A setting whose
   default is `null` also needs its kind in `KINDS` of `ui/settings_view.py`. Unknown keys are an error on load.
 - **Fitting the context** (`Session._fit_context`, `_counted`): before each request, earlier tool responses are
-  replaced with a note if the request would not fit (the user's and model's messages and the latest step's
-  responses never), out-of-date reads first (`conversation.superseded`: the same part read again, the whole file read later, an
+  shortened or replaced with a note if the request would not fit (the user's and model's messages and the latest step's
+  responses never). In the order below, out-of-date reads are removed whole and the others first shortened
+  (`condense.py`): a read keeps the functions and classes the conversation named since the read (the model's thinking,
+  replies and call arguments, and the user's messages; never tool responses, and only the current conversation, as
+  the entries start again at "Clear"), the rest keeps its first line and a `⋯ lines a-b left out ⋯` marker; Markdown
+  is kept whole if its path was named since, otherwise as headings; a text search keeps the files named since. Only
+  if that is not enough are whole responses replaced, in the same order. Replayed on a logged session (2026-11-05),
+  keeping the parts named since lost about 28 % less of what the model mentioned later per token freed than whole
+  removal; broader rules (repeated words, the prompt's words) kept far more without losing less. The order:
+  out-of-date reads first (`conversation.superseded`: the same part read again, the whole file read later, an
   edit of text the read showed, or any other change of the file), then the
   oldest, and last the latest current read of each file the user named in their messages (`conversation.named_reads`,
   `mentioned`): kept longest, never protected for good, as named files could fill the context and stop the turn; the note gives the call to repeat (`call_text`), but only if the model needs the exact text, and for a
   whole file only the section it needs, as an invitation to re-read made flint read back each removed file. Room is
   made down to `ROOM_TARGET` (three quarters) of the budget: every removal makes Ollama process the whole prompt again
   (2 to 3 minutes for 55 000 tokens on the CPU), so it must be seldom. After `REREADS_TO_ASK` calls in one turn
-  that repeat a removed call (`conversation.same_call`), the user is asked (`_ask_about_rereads`). The model is told
+  that repeat a removed or shortened call (`conversation.same_call`), the user is asked (`_ask_about_rereads`). The model is told
   that its context fills (`_note_to_model`: `CONTEXT_WARNING` once per fill at `WARN_AT`, `ROOM_MADE_NOTE` whenever
   room is made, as one step can fill the rest at once), at the end of the newest tool response and of its entry, never
   in a message of the user; appending at the end keeps Ollama's cached prompt. They are marked in
-  the feed (`Entry.removed`).
+  the feed (`Entry.removed`, `Entry.shortened`, which holds the shortened response the model has).
   The order comes from the calls, never from the model: don't add a tool for the model to flag what it needs (it
   costs definitions on every request, and the small models judge it poorly). If it still does not fit, it is not sent; and a drop in
   Ollama's prompt count without such a removal means Ollama cut the conversation, which stops the turn. This is the
@@ -135,6 +143,7 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 | `local_fox/saved_conversations.py` | Saving, listing and loading the project's conversations |
 | `local_fox/recent_projects.py` | The recent projects of the start dialog |
 | `local_fox/conversation.py` | `Entry`, the feed's data, and what is read from the entries: out-of-date and named reads, repeated calls, loops (`repeating`) |
+| `local_fox/condense.py` | Shortening old tool responses to the parts the conversation mentioned since, to make room in the context |
 | `local_fox/ollama_errors.py` | Ollama's errors explained for the feed, with what to try first |
 | `local_fox/ollama_server.py` | The Ollama panel's data: polling `ollama ps`, the activity text, starting and stopping `ollama serve` |
 | `local_fox/shell_path.py` | macOS: the login shell's PATH, added at the start |
@@ -197,8 +206,8 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 - **Selected text keeps its own color** (`theme.keep_selected_text_colors`: a highlighted-text brush without a
   color). Setting `selection-color` in the stylesheet would give all selected text one color again.
 - **The tools read their config when imported** (`common.py`), so each server is a process of its own, never
-  imported into Local Fox. Only `ollmcp_tools.locations` (no config) and the package's `templates` are used
-  in-process. If the tools' init or templates change (new files, renamed settings), carry it over to
+  imported into Local Fox. Only `ollmcp_tools.locations` (no config), `ollmcp_tools.parsing` (outlines of text,
+  for `condense.py`; it reads no config and no files) and the package's `templates` are used in-process. If the tools' init or templates change (new files, renamed settings), carry it over to
   `tools_setup._template_files`.
 - **The tools' rules stay in the tools**: `tools_config.check` checks only the kinds of the values. Don't copy the
   tools' validation; a server that does not start with a config shows its error (and its log's end) in the feed.

@@ -14,6 +14,7 @@ from pathlib import Path
 import httpx
 import ollama
 
+from . import condense
 from . import conversation as c
 from . import saved_conversations as saved
 from . import tools_setup
@@ -52,8 +53,9 @@ USE_WHAT_YOU_FOUND = ("Do not read again what you have already read. If you are 
                       "the part you edit, and finish the steps you started.")
 CONTEXT_WARNING = ("\n\n[Local Fox: this conversation now uses about {used} of the {budget} tokens the context allows, and "
                    "older tool responses will soon be removed to make room. " + USE_WHAT_YOU_FOUND + "]")
-ROOM_MADE_NOTE = ("\n\n[Local Fox: the context was full, so the responses of {count} older tool calls were replaced with "
-                  "notes. " + USE_WHAT_YOU_FOUND + "]")
+# {what}: "3 older tool responses were shortened to the parts mentioned since and the responses of 2 older tool calls
+# were replaced with notes", or one of the two
+ROOM_MADE_NOTE = "\n\n[Local Fox: the context was full, so {what}. " + USE_WHAT_YOU_FOUND + "]"
 CUT_OFF_MARK = "\n\n[This reply was cut off here: the context was full.]"
 # A reply that keeps repeating the same lines would run until the context is full and then stay in the conversation
 # (a loop of 50 000 characters was met), so it is stopped as the user's "Stop" would, and marked so (conversation.repeating)
@@ -635,7 +637,7 @@ class Session:
     async def _ask_about_rereads(self) -> None:
         """
         Asks the user whether to go on when the model has called again, REREADS_TO_ASK times in this turn, tools
-        whose responses were removed to make room: each re-read fills the context, which removes the next response,
+        whose responses were removed or shortened to make room: each re-read fills the context, which removes the next response,
         and every removal makes the next request slow. Local Fox decides nothing itself; the user can continue, make
         the context larger, or stop.
         """
@@ -643,7 +645,7 @@ class Session:
             return
         count, self._rereads = self._rereads, 0
         choice = await self._decide(
-            f"The model has called {count} tools again whose responses were removed to make room in the context of "
+            f"The model has called {count} tools again whose responses were removed or shortened to make room in the context of "
             f"{format_number(self.num_ctx)} tokens. The context is too small for how it works on this task, and each "
             "removal makes the next request slower, as Ollama processes the whole conversation again. Continue?",
             ["Continue", "Larger context", "Stop"], None)
@@ -689,9 +691,11 @@ class Session:
     def _fit_context(self) -> bool:
         """
         Makes the next request fit in the context, leaving room for the reply, before it is sent: if it would not
-        fit, the responses of earlier tool calls are replaced with a short note until it does. Out-of-date reads go
-        first (a file read again or changed later, see `superseded`), then the oldest responses, and last the latest
-        reads of the files the user named in their messages (`named_reads`). The note gives the
+        fit, the responses of earlier tool calls are shortened or replaced with a short note until it does. Out-of-date
+        reads go first (a file read again or changed later, see `superseded`), then the oldest responses, and last the
+        latest reads of the files the user named in their messages (`named_reads`). In that order, the out-of-date
+        reads are removed and the others first shortened to the parts the conversation has mentioned since
+        (`condense.shorten`); only if that is not enough are whole responses replaced, in the same order. The note gives the
         call that gets the content back, but asks the model to call it only if it needs the exact text, and for a whole
         file to read only the section it needs. Room is made down to ROOM_TARGET of the budget, so that it is made
         seldom. The responses of the latest step stay, as do all messages of the user and the model, so the model keeps
@@ -718,13 +722,16 @@ class Session:
         # named; each group oldest first
         candidates = [k for k, i in enumerate(tool_indexes) if i <= last_reply]
         candidates.sort(key=lambda k: (0 if k in stale else 2 if k in named else 1, k))
-        removed, tokens, named_removed = [], 0, []
-        for k in candidates:
+        removed, named_removed = [], []
+        shortened: dict[int, str] = {}  # By position; a response removed later in this room-making counts as removed only
+        tokens = 0
+
+        def remove(k: int) -> None:
+            """Replaces a response with a note that gives the call to repeat."""
+            nonlocal tokens
             i = tool_indexes[k]
             message = self.messages[i]
             entry = tool_entries[k] if matched else None
-            if (entry and entry.removed) or len(message.get("content", "")) < 400:
-                continue
             size = int(len(message["content"]) * self._tokens_per_char)
             name = entry.tool if entry else message.get("tool_name", "tool")
             target = main_argument(entry.args) if entry else ""
@@ -745,22 +752,63 @@ class Session:
             if entry:
                 entry.removed = True
                 self._update(entry)
+            shortened.pop(k, None)
             removed.append(f"{name} {target}".strip())
             if k in named:
                 named_removed.append(target)
             tokens += size
+
+        def shorten(k: int) -> None:
+            """Shortens a response to the parts the conversation mentioned since (condense.py), if it can be."""
+            nonlocal tokens
+            entry, i = tool_entries[k], tool_indexes[k]
+            short = condense.shorten(entry, condense.written_since(self.entries, entry))
+            if not short:
+                return
+            before = len(self.messages[i].get("content", ""))
+            self.messages[i] = {**self.messages[i], "content": short}
+            entry.shortened = short
+            self._update(entry)
+            shortened[k] = f"{entry.tool} {main_argument(entry.args)}".strip()
+            tokens += int((before - len(short)) * self._tokens_per_char)
+
+        def removable(k: int) -> bool:
+            entry = tool_entries[k] if matched else None
+            return not (entry and entry.removed) and len(self.messages[tool_indexes[k]].get("content", "")) >= 400
+
+        # First out-of-date reads are removed and the other responses shortened, in that order; only if that is not
+        # enough are whole responses removed, in the same order (the shortened ones too)
+        for k in candidates:
             if self._estimate() <= room_goal:
                 break
-        if removed:
+            if k in stale and removable(k):
+                remove(k)
+            elif matched and not tool_entries[k].removed and not tool_entries[k].shortened:
+                shorten(k)
+        for k in candidates:
+            if self._estimate() <= room_goal:
+                break
+            if removable(k):
+                remove(k)
+        if removed or shortened:
             self._made_room = True
-            self._note_to_model(ROOM_MADE_NOTE.format(count=len(removed)))
-            self.log.write("made_room", removed=removed, tokens=tokens, estimate=self._estimate(), budget=budget,
-                           named_removed=named_removed)
+            what = " and ".join(part for part in (
+                f"{len(shortened)} older tool response{'s were' if len(shortened) > 1 else ' was'} shortened to the parts "
+                f"mentioned since" if shortened else "",
+                f"the response{'s' if len(removed) > 1 else ''} of {len(removed)} older tool call{'s were' if len(removed) > 1 else ' was'} "
+                f"replaced with {'notes' if len(removed) > 1 else 'a note'}" if removed else "") if part)
+            self._note_to_model(ROOM_MADE_NOTE.format(what=what))
+            self.log.write("made_room", removed=removed, shortened=list(shortened.values()), tokens=tokens, estimate=self._estimate(),
+                           budget=budget, named_removed=named_removed)
             named_note = (f" Nothing else was left to remove, so this included the latest read of {', '.join(named_removed)}, "
                           "which you named: the context is small for this task." if named_removed else "")
-            self.notice(f"To fit the context, the responses of {len(removed)} earlier tool call{'s' if len(removed) > 1 else ''} "
-                        f"(about {format_number(tokens)} tokens) were replaced with a note for the model, which can call them "
-                        f"again. They are marked in the feed.{named_note}")
+            done = " and ".join(part for part in (
+                f"{len(shortened)} earlier tool response{'s were' if len(shortened) > 1 else ' was'} shortened to the parts "
+                f"the conversation has mentioned since" if shortened else "",
+                f"the response{'s' if len(removed) > 1 else ''} of {len(removed)} earlier tool call{'s were' if len(removed) > 1 else ' was'} "
+                f"replaced with a note" if removed else "") if part)
+            self.notice(f"To fit the context, {done} (about {format_number(tokens)} tokens). The model can call them again "
+                        f"for what it needs. They are marked in the feed.{named_note}")
             self.used_tokens = self._estimate()
             self.frontend.status()
         return self._estimate() <= budget
@@ -951,7 +999,8 @@ class Session:
             entry.collapsed = False
 
     async def _run_calls(self, calls: list) -> None:
-        removed = [e for e in self.entries if e.kind == c.TOOL and e.removed]
+        # A call repeated after its response was removed or shortened to make room
+        removed = [e for e in self.entries if e.kind == c.TOOL and (e.removed or e.shortened)]
         entries = [self.add(Entry(c.TOOL, tool=call.function.name, args=call.function.arguments, status=c.WAITING))
                    for call in calls]
         for i, entry in enumerate(entries):

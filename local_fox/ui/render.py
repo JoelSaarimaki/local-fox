@@ -65,14 +65,14 @@ def _arguments(entry: Entry) -> str:
         parts.append(f"<p class=dim>{esc(key)}:</p>{pre(value)}")
     return "".join(parts)
 
-def _response(entry: Entry) -> str:
+def _response(entry: Entry, heading: str = "Response:") -> str:
     text = entry.response
     if not text:
         return ""
     stripped = text.lstrip()
     body = pre(text) if stripped.startswith(("{", "[")) or entry.status in (c.SKIPPED, c.STOPPED) else md(text)
     images = f"<p class=dim>{len(entry.images)} image{'s' if len(entry.images) > 1 else ''} in the response</p>" if entry.images else ""
-    return f"<p class=dim>Response:</p>{body}{images}"
+    return f"<p class=dim>{esc(heading)}</p>{body}{images}"
 
 PREVIEW_LINES = 2       # The lines a collapsed answer shows
 PREVIEW_LINE_CHARS = 160
@@ -132,8 +132,14 @@ def entry_html(entry: Entry) -> str:
             line += f"&nbsp;&nbsp;<span class=dim>(ran {esc(entry.server)}:{esc(entry.resolved)})</span>"
         if entry.removed:
             line += "&nbsp;&nbsp;<span class=dim>(response removed from the model's context)</span>"
+        elif entry.shortened:
+            line += "&nbsp;&nbsp;<span class=dim>(response shortened in the model's context)</span>"
         if entry.collapsed:
             return f"<p>{line}</p>"
+        if entry.shortened and not entry.removed:
+            # What the model has now, and below it the response as the tool gave it
+            return (f"<p>{line}</p>{_arguments(entry)}<p class=dim>Response as the model has it now, shortened to make room:</p>"
+                    f"{md(entry.shortened)}{_response(entry, 'The whole response, as the tool gave it:')}")
         return f"<p>{line}</p>{_arguments(entry)}{_response(entry)}"
     if entry.kind in (c.INSTRUCTIONS, c.FILEMAP, c.TOOLS):
         line = f"<p class=dim>{toggle(entry, esc(entry.title))}</p>"

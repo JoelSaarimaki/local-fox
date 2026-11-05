@@ -280,7 +280,7 @@ Unlike the export, the log is written without asking and holds what the feed doe
 | `request` | One request to Ollama: its options and thinking setting, and the messages added since the request before |
 | `reply` | The reply, thinking and tool calls as the model made them, why it stopped (`repeating` when Local Fox stopped a loop), the token counts and the durations |
 | `tool` | A call by the name the model used, the tool that ran, the arguments, status, response and duration |
-| `made_room` | Tool responses replaced with a note to fit the context: which, how many tokens, and the estimate after |
+| `made_room` | Tool responses shortened or replaced with a note to fit the context: which, how many tokens, and the estimate after |
 | `context_note` | The note added to a tool response when the context fills or room was made |
 | `cut` | Ollama's count of a request dropped without a removal: it cut the conversation, and the turn stopped |
 | `decision` | A question to the user, the options and the choice |
@@ -340,19 +340,28 @@ Ollama does not refuse a longer request: it silently drops the oldest messages, 
 model goes on without knowing its task. Local Fox keeps that from happening:
 
 - **Before every request**, it estimates the request's size (calibrated with Ollama's own counts) and leaves room
-  for the reply. If the request would not fit, the responses of earlier tool calls are replaced with a short
-  note ("Removed by Local Fox to make room in the context: the response of
-  read_file_with_metadata(path='src/app.py'), about 5 900 tokens. Read it again only if you need its exact text,
-  and then only the section you need: read_file_with_metadata(path='src/app.py', section=...).") until the request
-  takes three quarters of the room. Making room seldom, with a margin, matters for speed: every removal changes
-  the start of the conversation, and Ollama then processes all of it again, which took two to three minutes per
-  request for 55 000 tokens on a laptop's CPU. Out-of-date reads go first: a part of a file the
-  model read again later (or the whole file), text it then edited, or a file it rewrote, moved or deleted. An edit
-  elsewhere in the file leaves a read in place. Then the oldest responses go, and last the latest read of each
-  file you named in your messages (by its path in the project or its full path, as "Add path to prompt" writes
-  it): you named them for the model to know. If even those have to go, the feed says so. Your messages, the
-  model's replies and the latest step's tool responses always stay, so the model keeps its task and can read a
-  file again. The feed says so, and marks those tool calls "(response removed from the model's context)".
+  for the reply. If the request would not fit, it makes room until the request takes three quarters of the room.
+  Making room seldom, with a margin, matters for speed: every change to earlier messages makes Ollama process the
+  whole conversation again, which took two to three minutes per request for 55 000 tokens on a laptop's CPU.
+- **First, old responses are shortened** to what is still in use. A file read keeps the functions and classes that
+  the conversation has named since the read (in the model's thinking and replies, the arguments of its later calls,
+  or your messages); the others keep only their first line, with the lines left out marked
+  (`⋯ lines 120-180 left out ⋯`), so the model still sees what the file has and where, and can read one part again
+  by its section. A Markdown document is kept whole if its path was named since, and otherwise as its headings. A
+  text search keeps the matches in the files named since, and gives the line numbers of the others. Only the
+  current conversation counts: what was said before "Clear" does not. Replayed on a logged session, this lost about
+  a quarter less of what the model needed later than removing whole responses, for the same room. The feed marks
+  such a call "(response shortened in the model's context)" and shows both what the model has and the whole response.
+- **Only if that is not enough**, whole responses are replaced with a short note ("Removed by Local Fox to make room
+  in the context: the response of read_file_with_metadata(path='src/app.py'), about 5 900 tokens. Read it again only
+  if you need its exact text, and then only the section you need: read_file_with_metadata(path='src/app.py',
+  section=...)."), and the feed marks those calls "(response removed from the model's context)".
+- **The order**: out-of-date reads go first, removed whole: a part of a file the model read again later (or the
+  whole file), text it then edited, or a file it rewrote, moved or deleted. An edit elsewhere in the file leaves a
+  read in place. Then the oldest responses, and last the latest read of each file you named in your messages (by its
+  path in the project or its full path, as "Add path to prompt" writes it): you named them for the model to know.
+  If even those have to go, the feed says so. Your messages, the model's replies and the latest step's tool
+  responses always stay, so the model keeps its task and can read a file again.
 - **The model is told when its context fills**: at 85 % of the room, and whenever room was made, a note at the end
   of the newest tool response tells it not to read again what it has read, and to use what it has found: answer now,
   save the plan now, or make the change now (reading only the part it edits) and finish the steps it started, before reading
@@ -360,7 +369,7 @@ model goes on without knowing its task. Local Fox keeps that from happening:
   their findings only in the responses that are removed next.
 - **If it still does not fit**, the request is not sent, and the feed offers **Clear**, **Export** and **Larger
   context**.
-- **If the model keeps reading again what was removed** (three such calls in one turn), Local Fox asks whether to
+- **If the model keeps reading again what was removed or shortened** (three such calls in one turn), Local Fox asks whether to
   go on, with **Continue**, **Larger context** and **Stop**: the context is then too small for how the model works on
   the task, and each read fills it again and removes the next response. In one run, flint:40b spent 19 minutes this
   way without reading anything new.

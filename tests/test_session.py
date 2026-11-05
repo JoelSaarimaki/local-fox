@@ -3,6 +3,7 @@ Tests of the session loop with a fake Ollama client and fake MCP servers: every 
 user's decisions are followed, and nothing is sent to the model that has no entry in the feed.
 """
 import asyncio
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -618,9 +619,68 @@ def test_the_model_is_told_when_the_context_is_filling(tmp_path):
 def test_the_model_is_told_when_room_was_made(tmp_path):
     # One step can fill the rest of the context at once: making room tells the model too
     session = run_reads(tmp_path, 8250)
-    full = [e for e in session.entries if e.kind == c.TOOL and "the context was full, so the responses of" in e.response]
+    full = [e for e in session.entries if e.kind == c.TOOL and "the context was full, so " in e.response]
     assert full and any(e.removed for e in session.entries)
     assert not full[-1].removed  # On the newest response, which the model reads next
+
+def code_reads(mcp, functions=12):
+    """Makes every read return a whole Python file of functions named after the file: a_0, a_1, ..."""
+    async def call_tool(name, args):
+        mcp.calls.append((name, args))
+        stem = args["path"].removesuffix(".py")
+        body = "\n".join(f"def {stem}_{n}(value):\n" + "\n".join(f"    value = value * {i} + {n}  # step {i} of {stem}_{n}" for i in range(8))
+                         + "\n    return value\n" for n in range(functions))
+        count = body.count("\n") + 1
+        text = f"- File: `{args['path']}`\n- Lines: 1-{count} of {count}\n\n```python\n{body}\n```"
+        return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)], is_error=False)
+    mcp.call_tool = call_tool
+
+def shortening_session(tmp_path, num_ctx, before_clear=None):
+    read = lambda path, thinking="": [chunk(thinking=thinking, tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], num_ctx=num_ctx, auto_approve_tools=["read_file_with_metadata"])
+    code_reads(mcp)
+    if before_clear:
+        session.client = CountingClient([[chunk(before_clear, done=True)]])
+        asyncio.run(session.send(before_clear))
+        asyncio.run(session.new_conversation())
+    session.client = CountingClient([read("a.py"), read("b.py", "a_3 is where the value is set"), read("c.py"),
+                                     read("d.py"), [chunk("Done.", done=True)]])
+    asyncio.run(session.send("Read the files"))
+    return session
+
+def test_old_responses_are_shortened_to_what_was_mentioned_before_any_is_removed(tmp_path):
+    session = shortening_session(tmp_path, 7500)
+    calls = {e.args["path"]: e for e in session.entries if e.kind == c.TOOL}
+    a = calls["a.py"]
+    assert a.shortened and not a.removed and not any(e.removed for e in calls.values())
+    # The model's thinking named a_3 after the read: it stays whole, the other functions keep their def line
+    assert "    value = value * 7 + 3  # step 7 of a_3" in a.shortened
+    assert "def a_4(value):\n    ⋯ lines" in a.shortened and "step 1 of a_4" not in a.shortened
+    assert tool_messages(session)[0] == a.shortened  # The model has what the feed shows
+    assert "- Shortened by Local Fox to make room in the context" in a.shortened and a.response.count("step") > a.shortened.count("step")
+    assert not calls["d.py"].shortened  # The latest step stays whole
+    notes = [e.response for e in session.entries if e.kind == c.TOOL and "[Local Fox: the context was full, so" in e.response]
+    assert notes and re.search(r"older tool responses? (were|was) shortened to the parts mentioned since", notes[-1])
+    assert any(e.kind == c.NOTICE and "shortened to the parts the conversation has mentioned since" in e.text for e in session.entries)
+    import json
+    made_room = [json.loads(line) for line in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8").splitlines()
+                 if '"made_room"' in line]
+    assert made_room and made_room[0]["shortened"][0] == "read_file_with_metadata a.py" and made_room[0]["removed"] == []
+
+def test_whole_responses_are_removed_when_shortening_is_not_enough(tmp_path):
+    session = shortening_session(tmp_path, 6000)
+    calls = [e for e in session.entries if e.kind == c.TOOL]
+    assert any(e.removed for e in calls) and any(e.shortened for e in calls)
+    assert tool_messages(session)[0].startswith("[Removed by Local Fox")  # The oldest goes whole, after being shortened
+    import json
+    for made_room in [json.loads(line) for line in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8").splitlines()
+                      if '"made_room"' in line]:
+        assert not set(made_room["shortened"]) & set(made_room["removed"])  # Removed after shortening: counted as removed
+
+def test_what_was_said_before_clear_does_not_keep_parts(tmp_path):
+    session = shortening_session(tmp_path, 7500, before_clear="Tell me about a_5 and a_6")
+    a = next(e for e in session.entries if e.kind == c.TOOL and e.args["path"] == "a.py")
+    assert a.shortened and "step 1 of a_5" not in a.shortened and "step 1 of a_3" in a.shortened
 
 def test_a_users_message_never_gets_a_note(tmp_path):
     session, _, _ = make_session(tmp_path, [])
