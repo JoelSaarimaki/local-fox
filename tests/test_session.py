@@ -318,7 +318,7 @@ def test_a_server_that_answers_again_is_noted_under_the_error(tmp_path):
     client.show = up
     asyncio.run(session.server_back())
     notices = [e.text for e in session.entries if e.kind == c.NOTICE and "answers now" in e.text]
-    assert notices == ["Ollama answers now at http://127.0.0.1:11434. flint:40b is ready."]
+    assert notices == ["Ollama answers now at http://127.0.0.1:11434. The model is set to flint:40b."]
     # The model was checked again, which the failed check at the start had left undone
     assert "thinking" in session.capabilities and session.max_context == 131072
     asyncio.run(session.server_back())  # Once only

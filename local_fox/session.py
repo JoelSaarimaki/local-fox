@@ -298,7 +298,8 @@ class Session:
         if error:
             self.error(error)
             return
-        self.notice(f"Ollama answers now at {host}. {self.model} is ready.")
+        # Not "ready": the server answers, but a model is loaded only by the first request (the panel shows it)
+        self.notice(f"Ollama answers now at {host}. The model is set to {self.model}.")
         self.frontend.status()
 
     async def new_conversation(self) -> None:
