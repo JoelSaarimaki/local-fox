@@ -414,7 +414,8 @@ class CountingClient(FakeClient):
         import json
         size = len(json.dumps(kwargs.get("tools") or [])) + sum(len(json.dumps({k: v for k, v in m.items() if k != "images"}))
                                                                  for m in kwargs["messages"])
-        count = self.counts.pop(0) if self.counts else int(size / 3.2)
+        given = self.counts.pop(0) if self.counts else None
+        count = given if given is not None else int(size / 3.2)  # None: as Ollama would count it
         stream = await super().chat(**kwargs)
 
         async def counted():
@@ -556,12 +557,27 @@ def test_call_text():
 
 def test_a_cut_by_ollama_stops_the_turn(tmp_path):
     read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
-    session, _, mcp = make_session(tmp_path, [], auto_approve_tools=["read_file_with_metadata"])
-    session.client = CountingClient([read("a.py"), read("b.py"), [chunk("Done.", done=True)]], counts=[30000, 29000])
+    session, _, mcp = make_session(tmp_path, [], num_ctx=8000, auto_approve_tools=["read_file_with_metadata"])
+    # The read added about 5 000 tokens by the estimate, which fit the budget; the count before and that, with the
+    # estimate's error, reach the context size, so a smaller count than before is Ollama's cut
+    session.client = CountingClient([read("a.py"), read("b.py"), [chunk("Done.", done=True)]], counts=[None, 200])
+    big_reads(session, mcp, size=16000)
     asyncio.run(session.send("Read"))
     assert any(e.kind == c.ERROR and "Ollama dropped the beginning of the conversation" in e.text for e in session.entries)
     assert tool_messages(session)[-1] == STOPPED_BEFORE  # The call of the cut reply is answered, not run
     assert len(mcp.calls) == 1
+
+def test_a_smaller_count_far_from_a_full_context_is_not_a_cut(tmp_path):
+    # llama3.1's template sends the tool definitions only with the user's message, so its count falls after a tool step
+    read = lambda path: [chunk(tool_calls=[call("read_file_with_metadata", {"path": path})], done=True)]
+    session, _, mcp = make_session(tmp_path, [], num_ctx=32768, auto_approve_tools=["read_file_with_metadata"])
+    # The second read's request counted as Ollama would, the third 2 600 tokens less than the one before it
+    session.client = CountingClient([read("a.py"), read("b.py"), [chunk("Done.", done=True)]], counts=[None, None, 2800])
+    big_reads(session, mcp, size=16000)
+    asyncio.run(session.send("Read"))
+    assert not any(e.kind == c.ERROR for e in session.entries) and session.entries[-1].text == "Done."
+    assert len(mcp.calls) == 2
+    assert '"smaller_count"' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
 
 def test_a_request_that_cannot_fit_is_not_sent(tmp_path):
     session, _, _ = make_session(tmp_path, [], num_ctx=2100)

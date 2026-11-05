@@ -57,6 +57,10 @@ CONTEXT_WARNING = ("\n\n[Local Fox: this conversation now uses about {used} of t
 # were replaced with notes", or one of the two
 ROOM_MADE_NOTE = "\n\n[Local Fox: the context was full, so {what}. " + USE_WHAT_YOU_FOUND + "]"
 CUT_OFF_MARK = "\n\n[This reply was cut off here: the context was full.]"
+# How far the estimate of what was added to a request may be too low (Session._counted): a smaller count is taken as
+# Ollama's cut only if the count before and this many times the estimate of what was added reach the context size.
+# A request is sent only when estimated under the budget, so a cut means the estimate was that far off.
+CUT_ESTIMATE_ERROR = 1.5
 # A reply that keeps repeating the same lines would run until the context is full and then stay in the conversation
 # (a loop of 50 000 characters was met), so it is stopped as the user's "Stop" would, and marked so (conversation.repeating)
 REPEATING_MARK = "\n\n[Local Fox stopped this reply here: it kept repeating the same lines.]"
@@ -134,6 +138,7 @@ class Session:
         # code has fewer characters per token than prose; and Ollama's count of the last request, to notice a cut
         self._tokens_per_char = 1 / 3.2
         self._last_prompt_tokens = 0
+        self._last_request_chars = 0  # The size of the request that _last_prompt_tokens counted
         self._request_chars = 0
         self._made_room = False
         self._rereads = 0  # Calls in this turn of tools whose responses were removed to make room (_ask_about_rereads)
@@ -311,7 +316,7 @@ class Session:
         self.entries, self.messages = [], []
         self._latest = {}
         self._warned = False
-        self._last_prompt_tokens = 0
+        self._last_prompt_tokens = self._last_request_chars = 0
         self.saved_path, self._created = None, None
         self.allow_all = False
         self.changed_files = set()
@@ -534,7 +539,7 @@ class Session:
 
     async def set_model(self, model: str) -> str | None:
         self.model = model
-        self._tokens_per_char, self._last_prompt_tokens = 1 / 3.2, 0  # Another tokenizer
+        self._tokens_per_char, self._last_prompt_tokens, self._last_request_chars = 1 / 3.2, 0, 0  # Another tokenizer
         error = await self.load_model_info()
         if not error and self.max_context and self.num_ctx > self.max_context:
             self.num_ctx = self.max_context
@@ -677,15 +682,24 @@ class Session:
         Takes Ollama's count of the request just sent. Ollama does not fail on a request longer than the context: it
         drops the oldest messages. The count then is smaller than the one before, although messages were only added
         (unless Local Fox made room itself), and the model no longer had all of the conversation.
+        A smaller count is a cut only if the request could have overflowed: the count before and what was added since,
+        with the estimate's error (CUT_ESTIMATE_ERROR), reach the context size. Some chat templates count less on their own: llama3.1's sends the tool
+        definitions only with the user's message, so its count fell by their 2 600 tokens after every tool step, which
+        stopped the turn as a cut in a context far from full. Such a count does not teach the token ratio either.
         """
         if not prompt_tokens:
             return
-        if self._last_prompt_tokens and prompt_tokens < self._last_prompt_tokens and not self._made_room:
+        smaller = bool(self._last_prompt_tokens) and prompt_tokens < self._last_prompt_tokens and not self._made_room
+        added = max(0, self._request_chars - self._last_request_chars) * self._tokens_per_char
+        if smaller and self._last_prompt_tokens + added * CUT_ESTIMATE_ERROR >= self.num_ctx:
             self._cut_by_ollama = True
             self.log.write("cut", prompt_tokens=prompt_tokens, before=self._last_prompt_tokens, num_ctx=self.num_ctx)
+        elif smaller:
+            self.log.write("smaller_count", prompt_tokens=prompt_tokens, before=self._last_prompt_tokens, num_ctx=self.num_ctx)
         elif self._request_chars:
             self._tokens_per_char = prompt_tokens / self._request_chars
         self._last_prompt_tokens = prompt_tokens
+        self._last_request_chars = self._request_chars
         self._made_room = False
 
     def _fit_context(self) -> bool:

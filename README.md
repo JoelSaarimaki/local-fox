@@ -282,7 +282,8 @@ Unlike the export, the log is written without asking and holds what the feed doe
 | `tool` | A call by the name the model used, the tool that ran, the arguments, status, response and duration |
 | `made_room` | Tool responses shortened or replaced with a note to fit the context: which, how many tokens, and the estimate after |
 | `context_note` | The note added to a tool response when the context fills or room was made |
-| `cut` | Ollama's count of a request dropped without a removal: it cut the conversation, and the turn stopped |
+| `cut` | Ollama's count of a request dropped without a removal, in a request that could have overflowed the context: it cut the conversation, and the turn stopped |
+| `smaller_count` | Ollama's count dropped in a request far from filling the context: not a cut, but the model's chat template counting less (llama3.1 sends the tool definitions only with your message) |
 | `decision` | A question to the user, the options and the choice |
 | `reopen` | A saved conversation reopened: its file and how many entries and messages it had |
 | `notice`, `error`, `setting`, `close` | The notices and errors of the feed, model and context changes, the end |
