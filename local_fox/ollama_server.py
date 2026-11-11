@@ -10,6 +10,12 @@ Ollama tells nothing of a request in progress, so the activity comes from Local 
 and 'ollama ps': a model that is still loading is not listed there (checked with Ollama 0.40, 2026-11-05), so a
 request that waits for its first reply chunk while its model is not listed is loading it, and one whose model is
 listed is reading the prompt.
+
+Where a model runs comes from 'ollama ps' too, but Ollama 0.40 does not always know it: a model it runs with the
+bundled llama.cpp server ('llamacpp' runner), which fits the model into the GPU itself, was listed with 1.5 GB, all
+of it in VRAM, so "100 % GPU", while the 18 GB model filled the 8 GB GPU and took 24 GB of RAM (gemma4:26b with a 131k
+context, 2026-11-11). A loaded size below the model's file size ('ollama list', read once per model) is such a case,
+and the panel says that the share is unknown.
 """
 import asyncio
 import os
@@ -41,13 +47,24 @@ class Loaded:
     name: str
     size: int = 0
     size_vram: int = 0
+    file_size: int = 0  # The model's size on disk, as 'ollama list' gives it; 0 if not known
+
+    def share_unknown(self) -> bool:
+        """
+        Whether Ollama's sizes cannot tell where the model runs: loaded smaller than its own file, which no model
+        is, so Ollama did not count all of its memory.
+        """
+        return bool(self.size and self.file_size and self.size < self.file_size)
 
     def placement(self) -> str:
         """
-        Where the model runs, as 'ollama ps' shows it: '100 % GPU', '77 % CPU / 23 % GPU' or '100 % CPU'.
+        Where the model runs, as 'ollama ps' shows it: '100 % GPU', '77 % CPU / 23 % GPU' or '100 % CPU', or
+        'GPU share unknown' when Ollama's sizes are not all of it (share_unknown).
         """
         if not self.size:
             return "loaded"
+        if self.share_unknown():
+            return "GPU share unknown"
         gpu = round(100 * (self.size_vram or 0) / self.size)
         if gpu >= 100:
             return "100 % GPU"
@@ -83,7 +100,26 @@ async def poll(client, timeout: float = POLL_TIMEOUT) -> State:
         return State(True, answering=False)
     except Exception:
         return State(False)
-    return State(True, [Loaded(m.model or m.name or "", m.size or 0, m.size_vram or 0) for m in models])
+    loaded = [Loaded(m.model or m.name or "", m.size or 0, m.size_vram or 0) for m in models]
+    if any(item.name not in _file_sizes for item in loaded):
+        await _read_file_sizes(client, timeout)
+    for item in loaded:
+        item.file_size = _file_sizes.get(item.name, 0)
+    return State(True, loaded)
+
+# The models' sizes on disk by name, from 'ollama list'; read again only when a model loads that is not in it
+_file_sizes: dict[str, int] = {}
+
+async def _read_file_sizes(client, timeout: float) -> None:
+    """
+    Reads the sizes of the installed models ('ollama list', Ollama's /api/tags): it only lists the model files,
+    loads nothing and keeps nothing loaded. A failure leaves the sizes unknown, and the placement as Ollama gives it.
+    """
+    try:
+        models = (await asyncio.wait_for(client.list(), timeout)).models
+    except Exception:
+        return
+    _file_sizes.update({m.model: m.size or 0 for m in models if getattr(m, "model", None)})
 
 def activity(state: State | None, model: str, phase: str | None) -> str:
     """

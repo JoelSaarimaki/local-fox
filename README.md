@@ -181,7 +181,9 @@ Local Fox starts by asking for the project, before the window opens:
   Forbidden files are darker, read-only files are marked `ro`, ignored folders are dimmed, and the files the AI
   changed in the session are orange.
 - **Ollama panel** below the filemap: the address of the Ollama server; the model, with where it runs as
-  `ollama ps` shows it ("77 % CPU / 23 % GPU", or "not loaded"; other loaded models are in its tooltip); and what
+  `ollama ps` shows it ("77 % CPU / 23 % GPU", or "not loaded"; other loaded models are in its tooltip), or "GPU
+  share unknown" when Ollama lists the model with less memory than its file takes (`ollama list`, read once per
+  model): Ollama 0.40 showed a model run by its llama.cpp server as "100 % GPU" although most of it ran on the CPU; and what
   the server is doing, checked with `ollama ps` every two seconds while a server is starting or a model is loading
   for a request, otherwise every 10 seconds and whenever you return to the window: "Loading the model…" (into
   memory), "Reading the prompt…" (the long wait before a reply on the CPU), "Thinking…", "Writing…" or "Idle". It

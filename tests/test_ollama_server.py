@@ -79,6 +79,39 @@ def test_poll_reads_ps_and_a_failure_is_not_reachable():
     hanging = asyncio.run(ollama_server.poll(Hanging(), timeout=0.05))
     assert hanging.reachable and not hanging.answering and activity(hanging, "m", None) == "Not answering"
 
+def test_a_loaded_size_below_the_file_size_is_an_unknown_share(monkeypatch):
+    # Ollama 0.40 listed gemma4:26b (18 GB) run by llama.cpp with 1.5 GB, all in VRAM, while it took 24 GB of RAM
+    monkeypatch.setattr(ollama_server, "_file_sizes", {})
+
+    class Client:
+        lists = 0
+
+        async def ps(self):
+            return SimpleNamespace(models=[SimpleNamespace(model="gemma4:26b", name="gemma4:26b", size=1.5 * GIB, size_vram=1.5 * GIB),
+                                           SimpleNamespace(model="llama3.1:latest", name="llama3.1:latest", size=6 * GIB, size_vram=6 * GIB)])
+
+        async def list(self):
+            Client.lists += 1
+            return SimpleNamespace(models=[SimpleNamespace(model="gemma4:26b", size=18 * GIB),
+                                           SimpleNamespace(model="llama3.1:latest", size=5 * GIB)])
+    client = Client()
+    state = asyncio.run(ollama_server.poll(client))
+    assert ollama_server.placement(state, "gemma4:26b") == "GPU share unknown" and state.find("gemma4:26b").share_unknown()
+    assert ollama_server.placement(state, "llama3.1") == "100 % GPU"  # Loaded with its cache, larger than its file
+    asyncio.run(ollama_server.poll(client))
+    assert Client.lists == 1  # The sizes are read once, not on every poll
+
+def test_without_the_file_sizes_the_placement_is_as_ollama_gives_it(monkeypatch):
+    monkeypatch.setattr(ollama_server, "_file_sizes", {})
+
+    class NoList:
+        async def ps(self):
+            return SimpleNamespace(models=[SimpleNamespace(model="m:1", name="m:1", size=10, size_vram=10)])
+
+        async def list(self):
+            raise ConnectionError("no")
+    assert asyncio.run(ollama_server.poll(NoList())).find("m:1").placement() == "100 % GPU"
+
 def test_only_this_computer_can_be_started():
     for host in ("http://127.0.0.1:11434", "http://localhost:11500", "127.0.0.1", "http://0.0.0.0:11434"):
         assert ollama_server.is_local(host), host

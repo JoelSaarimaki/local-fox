@@ -455,6 +455,11 @@ class MainWindow(QMainWindow):
         answers = state is not None and state.reachable
         others = ollama_server.others_loaded(state, model)
         model_tip = "Also loaded: " + ", ".join(others) if others else ""
+        current = state.find(model) if state and state.reachable else None
+        if current and current.share_unknown():
+            model_tip = ("Ollama lists the model with less memory than its file takes, so it does not tell how much of it "
+                         "runs on the GPU. A model larger than the GPU's memory runs partly on the CPU."
+                         + (f" {model_tip}." if model_tip else ""))
         self.ollama_panel.show_state(host, text, tip=tip,
                                      can_start=down and not own and local, can_stop=own or (answers and local),
                                      model=model, placement=ollama_server.placement(state, model), model_tip=model_tip)
