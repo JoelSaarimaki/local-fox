@@ -19,7 +19,7 @@ from . import conversation as c
 from . import saved_conversations as saved
 from . import tools_setup
 from .config import data_dir, without_secrets
-from .conversation import Entry, call_text, estimate_tokens, format_number, main_argument, named_reads, same_call, superseded
+from .conversation import Entry, call_text, estimate_tokens, format_number, main_argument, named_reads, same_call, same_failures, superseded
 from .filemap import Rules, instructions_path, model_filemap, tools_config_path
 from .mcp_servers import Servers
 from . import ollama_server
@@ -33,6 +33,7 @@ APPROVAL_OPTIONS = ["Allow", "Allow all for this session", "Skip", "Stop"]
 AUTO_ANSWERS = ("Allow", "Continue")
 SKIPPED_RESPONSE = "The user skipped this call."
 STOPPED_BEFORE = "The user stopped the session before this call ran."
+SAME_FAILURES_STOPPED = "Not run: Local Fox ended the turn before this call, as an earlier call kept failing the same way."
 # Added to a reply that did not end on its own, in the feed and in the history the model gets, so that neither
 # the user nor the model takes it as finished
 STOPPED_MARK = "\n\n[The user stopped this reply here.]"
@@ -71,6 +72,12 @@ CUT_ESTIMATE_ERROR = 1.5
 # A reply that keeps repeating the same lines would run until the context is full and then stay in the conversation
 # (a loop of 50 000 characters was met), so it is stopped as the user's "Stop" would, and marked so (conversation.repeating)
 REPEATING_MARK = "\n\n[Local Fox stopped this reply here: it kept repeating the same lines.]"
+# A tool call that failed the same way as an earlier one of the turn gets this note at the end of its response; the
+# turn ends when the same call has failed SAME_FAILURES_TO_STOP times. Nothing changes between such calls, so they
+# fail again: gemma4:26b sent one failing edit four times, 15 minutes, until the user stopped it.
+SAME_FAILURE_NOTE = ("\n\n[Local Fox: this call is the same as an earlier one in this turn, and it failed with the same "
+                     "error. Sent again, it fails again: change its arguments as the error says, or do something else.]")
+SAME_FAILURES_TO_STOP = 3
 # The parts of the feed of which the latest is kept open
 TOOL_CALL, THINKING, ANSWER = "tool call", "thinking", "answer"
 STOPPED_WHILE ="The user stopped the session while this call ran; its result is unknown."
@@ -652,7 +659,8 @@ class Session:
                 if not entry.text.strip():
                     self.notice("The model ended its turn without a reply or a tool call.")
                 return
-            await self._run_calls(calls)
+            if await self._run_calls(calls):
+                return
             await self._ask_about_rereads()
 
     async def _ask_about_rereads(self) -> None:
@@ -1092,7 +1100,11 @@ class Session:
         else:
             entry.collapsed = False
 
-    async def _run_calls(self, calls: list) -> None:
+    async def _run_calls(self, calls: list) -> bool:
+        """
+        Runs the tool calls of a reply, in order. Returns True if the turn must end because a call kept failing
+        the same way (`_same_failure`); the calls after it then get a response saying that they did not run.
+        """
         # A call repeated after its response was removed or shortened to make room
         removed = [e for e in self.entries if e.kind == c.TOOL and (e.removed or e.shortened)]
         entries = [self.add(Entry(c.TOOL, tool=call.function.name, args=call.function.arguments, status=c.WAITING))
@@ -1104,12 +1116,39 @@ class Session:
                 await self._run_call(entry)
                 if any(same_call(entry, earlier) for earlier in removed):
                     self._rereads += 1  # Its name is resolved now, so a prefixed name counts too
+                if self._same_failure(entry):
+                    for later in entries[i + 1:]:
+                        self._respond(later, SAME_FAILURES_STOPPED, c.STOPPED)
+                    return True
             except (asyncio.CancelledError, StopTurn):
                 # Every call gets a response, also those the user stopped
                 for later in entries[i:]:
                     if later.status in (c.WAITING, c.RUNNING):
                         self._respond(later, STOPPED_WHILE if later.status == c.RUNNING else STOPPED_BEFORE, c.STOPPED)
                 raise
+        return False
+
+    def _same_failure(self, entry: Entry) -> bool:
+        """
+        Handles a call that failed as the same call did earlier in this turn: the model is told so at the end of the
+        response (in the entry and the message alike), and after SAME_FAILURES_TO_STOP such failures the turn ends
+        with a notice, as a repeating reply does. Auto mode does not go on past it: it is not a question, and the
+        user's next message is what continues. Returns True if the turn must end.
+        """
+        turn_start = max((k for k, e in enumerate(self.entries) if e.kind == c.USER), default=0)
+        count = same_failures(self.entries[turn_start:], entry, SAME_FAILURE_NOTE) + 1
+        if count < 2:
+            return False
+        entry.response += SAME_FAILURE_NOTE
+        self.messages[-1] = {**self.messages[-1], "content": entry.response}  # The message _respond appended
+        self._update(entry)
+        if count < SAME_FAILURES_TO_STOP:
+            return False
+        self.log.write("same_failures", tool=entry.resolved or entry.tool, count=count)
+        self.notice(f"The model made the same {entry.resolved or entry.tool} call {count} times in this turn, and it failed "
+                    "the same way each time, so Local Fox ended the turn. Send a message to go on: for example, tell it "
+                    "what is wrong with the call, or what to do instead.")
+        return True
 
     def _respond(self, entry: Entry, text: str, status: str, images: list | None = None) -> None:
         entry.response, entry.status = text, status

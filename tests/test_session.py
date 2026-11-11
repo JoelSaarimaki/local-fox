@@ -778,6 +778,57 @@ def test_a_reply_that_keeps_repeating_is_stopped_and_marked(tmp_path):
     assert any(e.kind == c.NOTICE and "kept repeating" in e.text for e in session.entries)
     assert '"repeating": true' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
 
+class FailingEdits(FakeMcp):
+    """Fails every edit_file call with the tools' no_match error; reads work."""
+
+    async def call_tool(self, name, args):
+        if name != "edit_file":
+            return await super().call_tool(name, args)
+        self.calls.append((name, args))
+        return SimpleNamespace(content=[SimpleNamespace(type="text", text="Error (no_match): old_text was not found in the file.")],
+                               is_error=True)
+
+def failing_edit_session(tmp_path, replies):
+    session, client, _ = make_session(tmp_path, replies)
+    mcp = FailingEdits()
+    session.servers.sessions = {"dev": mcp}
+    session.auto = True  # The run that looped had auto mode on; ending the turn must not depend on a question
+    return session, client, mcp
+
+def test_the_same_failing_call_is_noted_and_then_ends_the_turn(tmp_path):
+    # As in the logged run: the same edit, a read between each, until the user stopped it
+    edit = [chunk(tool_calls=[call("edit_file", {"path": "a.py", "old_text": "x = 2", "new_text": "x = 3"})], done=True)]
+    read = [chunk(tool_calls=[call("read_file_with_metadata", {"path": "a.py"})], done=True)]
+    session, client, mcp = failing_edit_session(tmp_path, [edit, read, edit, read, edit, [chunk("Never reached", done=True)]])
+    asyncio.run(session.send("Change x"))
+    from local_fox.session import SAME_FAILURE_NOTE
+    edits = [e for e in session.entries if e.kind == c.TOOL and e.tool == "edit_file"]
+    assert len(edits) == 3 and len(client.requests) == 5
+    assert [e.response.endswith(SAME_FAILURE_NOTE) for e in edits] == [False, True, True]
+    assert [m for m in tool_messages(session) if m.startswith("Error")] == [e.response for e in edits]  # The model has what the feed shows
+    assert session.entries[-1].kind == c.NOTICE and "same edit_file call 3 times" in session.entries[-1].text
+    assert '"event": "same_failures"' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
+
+def test_a_changed_call_or_a_new_turn_starts_the_count_again(tmp_path):
+    edit = lambda text: [chunk(tool_calls=[call("edit_file", {"path": "a.py", "old_text": text, "new_text": "y"})], done=True)]
+    done = [chunk("ok", done=True)]
+    session, client, _ = failing_edit_session(tmp_path, [edit("a"), edit("b"), edit("a"), done, edit("a"), done])
+    asyncio.run(session.send("Change x"))
+    asyncio.run(session.send("Try again"))
+    from local_fox.session import SAME_FAILURE_NOTE
+    edits = [e for e in session.entries if e.kind == c.TOOL]
+    assert [e.response.endswith(SAME_FAILURE_NOTE) for e in edits] == [False, False, True, False]
+    assert not any(e.kind == c.NOTICE and "same edit_file" in e.text for e in session.entries)
+
+def test_calls_after_the_third_same_failure_in_one_reply_do_not_run(tmp_path):
+    args = {"path": "a.py", "old_text": "x = 2", "new_text": "x = 3"}
+    calls = [call("edit_file", args)] * 3 + [call("read_file_with_metadata", {"path": "a.py"})]
+    session, client, mcp = failing_edit_session(tmp_path, [[chunk(tool_calls=calls, done=True)], [chunk("Never reached", done=True)]])
+    asyncio.run(session.send("Change x"))
+    from local_fox.session import SAME_FAILURES_STOPPED
+    assert len(mcp.calls) == 3 and len(client.requests) == 1
+    assert tool_messages(session)[-1] == SAME_FAILURES_STOPPED and len(tool_messages(session)) == 4
+
 def test_thinking_that_keeps_repeating_is_stopped_without_a_message(tmp_path):
     session, _, _ = make_session(tmp_path, [])
     session.client = FakeClient([[chunk(thinking=line + "\n") for line in looping_text().splitlines()]])

@@ -168,6 +168,17 @@ def same_call(a: Entry, b: Entry) -> bool:
         return False
     return {**a.args, "path": _path(a.args)} == {**b.args, "path": _path(b.args)}
 
+def same_failures(turn: list[Entry], entry: Entry, note: str = "") -> int:
+    """
+    Returns how many tool calls of this turn before a failed one were the same call (`same_call`) and failed with
+    the same response, without the note Local Fox adds to such responses. A small model told only to "copy the text
+    exactly" sent one failing edit four times; nothing changes between such calls, so they fail again.
+    """
+    if entry.status != FAILED:
+        return 0
+    return sum(1 for earlier in turn if earlier is not entry and earlier.kind == TOOL and earlier.status == FAILED
+               and same_call(earlier, entry) and earlier.response.removesuffix(note) == entry.response)
+
 def call_text(name: str, args) -> str:
     """
     Returns a tool call as the model can repeat it, read_file_with_metadata(path='cart.py', section='Cart.total'),

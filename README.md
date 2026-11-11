@@ -219,7 +219,8 @@ Local Fox starts by asking for the project, before the window opens:
 - **Auto mode**, the checkbox beside **Send**: tool calls run without asking, and the questions that would pause
   a running turn (the `max_steps` limit, repeated reads of shortened or removed responses) are answered
   **Continue**, shown in the feed as a notice. Ticked while such a question waits, it answers it. It never sends a
-  message: a turn you stop, an error, a full context or a reply stopped for repeating itself still ends the turn.
+  message: a turn you stop, an error, a full context, a reply stopped for repeating itself or a call that keeps
+  failing the same way still ends the turn.
   It is off at every start.
 - **Prompt**: Enter sends, Shift + Enter adds a line, Up and Down recall sent messages, Esc stops the model.
   **There is no queue**: while the model runs, Enter does not send (the button is **Stop**); the message stays
@@ -287,6 +288,7 @@ Unlike the export, the log is written without asking and holds what the feed doe
 | `tool` | A call by the name the model used, the tool that ran, the arguments, status, response and duration |
 | `made_room` | Tool responses shortened or replaced with a note to fit the context: which, how many tokens, and the estimate after |
 | `context_note` | The note added to a tool response when the context fills or room was made |
+| `same_failures` | The turn ended because the model made the same tool call three times and it failed the same way each time |
 | `cut` | Ollama's count of a request dropped without a removal, in a request that could have overflowed the context: it cut the conversation, and the turn stopped |
 | `smaller_count` | Ollama's count dropped in a request far from filling the context: not a cut, but the model's chat template counting less (llama3.1 sends the tool definitions only with your message) |
 | `decision` | A question to the user, the options and the choice; `auto` if auto mode answered it |
@@ -403,6 +405,11 @@ model goes on without knowing its task. Local Fox keeps that from happening:
   written out in 10 code blocks (in the thinking or the answer), which some models do until the context is full. It
   is marked "[Local Fox stopped this reply here: it kept repeating the same lines.]", its tool calls are not run, and
   a notice says so; your next message continues. Drafting the same code a few times is not stopped.
+- **A call that keeps failing the same way ends the turn.** When the model makes a tool call again in a turn, with
+  the same arguments, and it fails with the same error, its response ends with a note that it will fail again unless
+  its arguments change. The third such failure ends the turn with a notice, and the calls after it in the same reply
+  are not run; your next message continues. A small model once sent one failing edit four times, 15 minutes, as
+  nothing in the error told it what was wrong.
 - **Only your next message continues.** Local Fox never sends anything on its own; type e.g. "continue", or a
   new instruction. The model gets the whole conversation with the marks and the stopped calls' responses.
 

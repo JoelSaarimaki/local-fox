@@ -105,6 +105,10 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   10 code blocks, in the last 20 000 characters) is stopped as a user's Stop would, marked `REPEATING_MARK`, and
   ends the turn with a notice (`Session._stop_repeating`). gemma4:26b looped for 50 000 characters; the limits are high
   because a reply that drafted one class ten times still ended with a good call. Tune them against logged replies.
+  A tool call that fails as the same call did earlier in the turn (`conversation.same_failures`: the same call and
+  response) gets `SAME_FAILURE_NOTE` at the end of its response, and the `SAME_FAILURES_TO_STOP`th ends the turn with
+  a notice (`Session._same_failure`), the calls after it answered `SAME_FAILURES_STOPPED`. It is not a question, so
+  auto mode does not go past it: gemma4:26b sent one failing edit four times (2026-11-11) with auto mode on.
 - **No queue**: while a turn runs (or was sent and has not started, `MainWindow._busy`), a message is not taken
   and stays in the prompt; the user stops the model first. Don't add queued or interrupting sends without asking.
 - **Clipboard**: only Qt's own Ctrl + C / X / V, plus the filemap's explicit Copy path; nothing copies or pastes on
