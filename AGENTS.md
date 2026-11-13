@@ -167,7 +167,7 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 | `local_fox/shell_path.py` | macOS: the login shell's PATH, added at the start |
 | `local_fox/config.py`, `export.py`, `cli.py` | Settings, Markdown export, the command line for testing the core |
 | `local_fox/__main__.py` | The entry point of the window and the executable; `--tools-server` runs the bundled tools instead |
-| `local_fox/ui/` | The window: `app.py` (the start), `project_dialog.py`, `main_window.py`, `settings_view.py`, `feed.py` + `render.py` (HTML), `filemap_view.py`, `document_view.py` (files opened from the filemap, in tabs beside the feed), `ollama_panel.py`, `prompt.py`, `bridge.py`, `theme.py` (the palette and stylesheets), `logo.py` (the fox and the icons) |
+| `local_fox/ui/` | The window: `app.py` (the start), `project_dialog.py`, `main_window.py`, `settings_view.py`, `feed.py` + `render.py` (HTML), `filemap_view.py`, `document_view.py` (files opened from the filemap, in tabs beside the feed), `ollama_panel.py`, `prompt.py`, `bridge.py`, `theme.py` (the palette and stylesheets), `wheel_guard.py` (the wheel scrolls past dropdowns and number fields), `logo.py` (the fox and the icons) |
 | `tools/compare.py` | Runs ollmcp-generic-tools' comparison scenarios through the core |
 | `packaging/local_fox.spec`, `build.ps1`, `build.sh` | The executable (Windows), the application (macOS, Linux) |
 | `tests/` | Unit tests with a fake Ollama client and fake MCP servers |
@@ -244,6 +244,10 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   needed files first in 6 of 14 runs instead of 11 of 14 (results in ollmcp-generic-tools' local_ai_test_results.md). Projects set up earlier
   still have the `dev_` names; the name resolution covers them. `tools/compare.py` uses Local Fox's template by
   default (`--instructions tools` for the tools' one). The template is package data (pyproject, and the spec's `datas`).
+- **The mouse wheel changed dropdowns and number fields** under the cursor while scrolling the settings.
+  `ui/wheel_guard.py`, installed on the application by `app.py`, passes those wheel events on to the scroll area;
+  a value changes only by clicking, typing or the arrow keys. Qt hands on only real wheel events, not sent ones,
+  so tests check that the field ignores the event.
 - Notices in the feed are plain text with their line breaks kept (`render.py`), not Markdown.
 - **Errors in the feed are orange** (`.error` uses `ACCENT`), and say what to try: Ollama's errors go through
   `ollama_errors.explain` / `explain_connection`, which add an explanation before Ollama's own message. Add a case there

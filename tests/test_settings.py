@@ -70,3 +70,22 @@ def test_form_reports_wrong_numbers(app):
 
 def test_removed_settings_are_dropped():
     assert not set(config.validate({"session_log": True, "session_log_days": 30, "tool_calls_collapsed": True})) & config.REMOVED
+
+def test_the_wheel_passes_over_dropdowns_and_numbers_to_the_scrolled_settings(app):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QApplication, QComboBox, QSpinBox
+    from local_fox.ui.settings_view import AppSettingsForm
+    from local_fox.ui.wheel_guard import guard_wheel
+    assert guard_wheel(app) is guard_wheel(app)  # Installed once
+    form = AppSettingsForm({**config.DEFAULTS, "num_ctx": 65536, "num_thread": 4}, max_contexts={"flint:40b": 262144})
+    assert isinstance(form.fields["font_size"], QSpinBox) and isinstance(form.fields["num_thread"], QComboBox)
+    for key in ("num_ctx", "num_thread", "font_size"):
+        before = form.values()[key]
+        for delta in (-120, 120):
+            event = QWheelEvent(QPointF(5, 5), QPointF(5, 5), QPoint(0, 0), QPoint(0, delta),
+                                Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
+            QApplication.sendEvent(form.fields[key], event)
+            # Ignored, so Qt hands a real wheel event on to the scroll area (a sent one is not handed on)
+            assert not event.isAccepted(), key
+        assert form.values()[key] == before, key

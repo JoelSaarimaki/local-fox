@@ -18,6 +18,7 @@ from . import theme
 from .logo import fox_icon
 from .main_window import MainWindow
 from .project_dialog import choose_project
+from .wheel_guard import guard_wheel
 
 def folder_argument(argv: list[str]) -> Path | None:
     """
@@ -50,6 +51,7 @@ def main() -> int:
     font.setPointSize(settings.get("font_size", 10))
     app.setFont(font)
     theme.keep_selected_text_colors(app)
+    guard_wheel(app)  # The wheel scrolls past dropdowns and number fields instead of changing them
     app.setStyleSheet(theme.stylesheet(settings.get("font_size", 10)))
     if config_error:
         QMessageBox.warning(None, APP_NAME, f"config.json: {config_error}\nThe defaults are used until it is fixed.")
