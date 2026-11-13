@@ -297,7 +297,7 @@ def test_the_threads_menu_offers_ollamas_choice_and_this_computers_processors(ap
     from local_fox.ui.main_window import MainWindow
     monkeypatch.setattr(ollama_server, "processors", lambda: 4)
     window = MainWindow(dict(config.DEFAULTS))
-    assert window.threads_button.text() == "threads auto / 4"
+    assert window.threads_button.text() == "threads auto / 4 ▾"
     set_to = []
     window._set_threads = set_to.append
     errors = []
@@ -311,3 +311,19 @@ def test_the_threads_menu_offers_ollamas_choice_and_this_computers_processors(ap
     window._threads_command("auto")
     window._threads_command("5")  # More than this computer has: refused
     assert set_to == [2, None] and "from 1 to 4" in errors[0]
+
+def test_the_model_context_and_threads_are_dropdowns_alike(app):
+    from PySide6.QtWidgets import QToolButton
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow(dict(config.DEFAULTS))
+    for button in (window.model_button, window.context_button, window.threads_button):
+        assert button.popupMode() == QToolButton.InstantPopup and button.menu() and button.text().endswith(" ▾")
+    set_to = []
+    window._set_context = set_to.append
+    window.session = SimpleNamespace(num_ctx=8192, max_context=32768)
+    window._fill_context_menu()
+    actions = [a for a in window.context_menu.actions() if a.isEnabled()]
+    assert [a.text() for a in actions] == ["4 096 tokens", "8 192 tokens", "16 384 tokens", "32 768 tokens"]
+    assert actions[1].isChecked()
+    actions[2].trigger()
+    assert set_to == [16384]

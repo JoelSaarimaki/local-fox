@@ -170,10 +170,11 @@ Local Fox starts by asking for the project, before the window opens:
 
 ## The window
 
-- **Top bar**: the version, the model (click to switch), the context size (click to choose another for the session,
-  from 4 096 tokens doubled up to the model's maximum; `/context <size>` sets any other), and the CPU threads
-  Ollama runs the model with: "threads auto / 16" when Ollama chooses them on a computer with 16 processors.
-  Click it to choose a number for the session, from 1 to the computer's processors; Ollama loads the model again with them on the next request (about 20 seconds for gemma4:26b). Fewer threads use less of the CPU, so
+- **Top bar**: the version and three dropdowns for the session: the model, the context size (4 096 tokens
+  doubled up to the model's maximum; `/context <size>` sets any other), and the CPU threads Ollama runs the model
+  with ("threads auto / 16" when Ollama chooses them on a computer with 16 processors; 1 up to the computer's
+  processors to choose from). Ollama loads the model again with new threads on the next request (about 20 seconds
+  for gemma4:26b). Fewer threads use less of the CPU, so
   the computer stays cooler and quieter, without limiting other programs; the model may get slower, the more so
   the more of it runs on the CPU. Measured with gemma4:26b, partly on the GPU, on a 16-processor laptop (2026-11-13):
   2 threads took about 25 % of the CPU and 4 threads 31–38 %, against 53–56 % with Ollama's choice of 8, and the

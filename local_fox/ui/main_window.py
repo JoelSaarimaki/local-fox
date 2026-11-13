@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QEvent, QFileSystemWatcher, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QFont, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
+from PySide6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QSplitter, QToolTip,
                                QToolButton, QVBoxLayout, QWidget)
 
@@ -111,20 +111,11 @@ class MainWindow(QMainWindow):
         # The name in orange and the version in grey, as in the start dialog
         title = QLabel(f"<span style='color: {theme.ACCENT}; font-weight: bold'>{APP_NAME}</span>"
                        f"&nbsp;<span style='color: {theme.DIM}'>{__version__}</span>")
-        self.model_button = QToolButton(objectName="flat")
-        self.model_button.setPopupMode(QToolButton.InstantPopup)
-        self.model_button.setToolTip("The model: click to switch")
-        self.model_menu = QMenu(self)
-        self.model_menu.aboutToShow.connect(self._fill_model_menu)
-        self.model_button.setMenu(self.model_menu)
-        self.context_button = _button("", self._ask_context, "flat", "The context size: click to change it for this session")
-        self.threads_button = QToolButton(objectName="flat")
-        self.threads_button.setPopupMode(QToolButton.InstantPopup)
-        self.threads_button.setToolTip("The CPU threads Ollama runs the model with: fewer use less of the CPU and keep the "
-                                       "computer cooler and quieter, but may make the model slower. Click to change them for this session.")
-        self.threads_menu = QMenu(self)
-        self.threads_menu.aboutToShow.connect(self._fill_threads_menu)
-        self.threads_button.setMenu(self.threads_menu)
+        # The model, the context size and the CPU threads: dropdowns alike, each filled when it opens
+        self.model_button, self.model_menu = self._dropdown("The model", self._fill_model_menu)
+        self.context_button, self.context_menu = self._dropdown("The context size for this session", self._fill_context_menu)
+        self.threads_button, self.threads_menu = self._dropdown("CPU threads for Ollama: fewer run cooler, maybe slower",
+                                                                self._fill_threads_menu)
         self.usage_label = QLabel("", objectName="dim")
         self.usage_label.setToolTip("How much of the context the conversation uses")
         self.project_label = QLabel("", objectName="dim")
@@ -143,7 +134,7 @@ class MainWindow(QMainWindow):
         self.conversations_menu.aboutToShow.connect(self._fill_conversations_menu)
         menu.addAction("Reload instructions", self._reload_instructions)
         menu.addAction("Set up project", lambda: self._set_up())
-        menu.addAction("Context size", self._ask_context)
+        menu.addAction("Context size", self.context_button.showMenu)
         menu.addAction("Settings", self._open_settings)
         menu.addAction("Open config folder", self._open_config)
         menu_button.setMenu(menu)
@@ -397,10 +388,10 @@ class MainWindow(QMainWindow):
         model = s.model if s else self.settings["model"]
         num_ctx = s.num_ctx if s else self.settings["num_ctx"]
         self.model_button.setText(f"{model} ▾")
-        self.context_button.setText(f"ctx {format_number(num_ctx)}")
+        self.context_button.setText(f"ctx {format_number(num_ctx)} ▾")
         threads = s.num_thread if s else self.settings["num_thread"]
         local = ollama_server.is_local(s.config["ollama_host"] if s else self.settings["ollama_host"])
-        self.threads_button.setText(f"threads {threads or 'auto'}" + (f" / {ollama_server.processors()}" if local else ""))
+        self.threads_button.setText(f"threads {threads or 'auto'}" + (f" / {ollama_server.processors()}" if local else "") + " ▾")
         if s:
             self.usage_label.setText(f"{format_number(s.used_tokens)} / {format_number(num_ctx)} tokens")
             self.filemap.set_changed(s.changed_files)
@@ -1168,15 +1159,33 @@ class MainWindow(QMainWindow):
                            "less of the CPU and keep the computer cooler; the model may get slower, the more so the more of it runs on the CPU.")
         self.runner.call(set_threads)
 
-    def _ask_context(self) -> None:
+    def _dropdown(self, tip: str, fill) -> tuple[QToolButton, QMenu]:
+        """
+        Returns a flat button of the top bar that opens a menu, and the menu, which fill fills each time it opens.
+        """
+        button = QToolButton(objectName="flat")
+        button.setPopupMode(QToolButton.InstantPopup)
+        button.setCursor(Qt.PointingHandCursor)
+        button.setToolTip(tip)
+        menu = QMenu(self)
+        menu.aboutToShow.connect(fill)
+        button.setMenu(menu)
+        return button, menu
+
+    def _fill_context_menu(self) -> None:
+        """
+        Fills the context size menu: 4 096 tokens doubled up to the model's largest, and the session's own size.
+        """
+        menu = self.context_menu
+        menu.clear()
         if not self.session:
+            menu.addAction("Open a project first").setEnabled(False)
             return
-        sizes = context_sizes(self.session.num_ctx, self.session.max_context)
-        labels = [f"{format_number(size)} tokens" for size in sizes]
-        label, ok = QInputDialog.getItem(self, "Context size", "Context size for this session (/context sets any other size):",
-                                         labels, sizes.index(self.session.num_ctx), False)
-        if ok and sizes[labels.index(label)] != self.session.num_ctx:
-            self._set_context(sizes[labels.index(label)])
+        menu.addAction("Context size for this session (/context sets any other)").setEnabled(False)
+        for size in context_sizes(self.session.num_ctx, self.session.max_context):
+            action = menu.addAction(f"{format_number(size)} tokens", lambda s=size: self._set_context(s))
+            action.setCheckable(True)
+            action.setChecked(size == self.session.num_ctx)
 
     # --- Closing ---
 
