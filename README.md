@@ -14,7 +14,7 @@ on Windows; for macOS and Linux, see [On macOS and Linux](#on-macos-and-linux).
 
 1.  **Install Ollama and the model.**
     Download and install Ollama from [ollama.com](https://ollama.com/). It keeps running in the background, and
-    Local Fox finds it at `http://127.0.0.1:11434`. Then download the default model, qwen3.6:35b (about 23 GB):
+    Local Fox finds it at `http://127.0.0.1:11434`. Then download the default model, qwen3.6:35b (about 22 GB):
     ```powershell
     ollama pull qwen3.6:35b
     ```
