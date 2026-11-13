@@ -147,7 +147,7 @@ has been reported to loop there.
   through the settings view's Project tools tab and the filemap's "Add path to …" actions (`tools_config.py`).
   The tools read it when they start, so a change applies when they restart, which starts a new conversation.
 - **One log per run** (`session_log.py`): `logs/session.jsonl` next to `config.json`, appended through the run,
-  plus the servers' stderr in `logs/server-<key>.log`. Every start of the application (the window, the CLI,
+  plus the servers' stderr in `logs/server-<key>.log` and a hidden `ollama serve`'s output in `logs/ollama-serve.log`. Every start of the application (the window, the CLI,
   `tools/compare.py`) empties them with `session_log.reset()`, so the log is ready right after a failure; there
   are deliberately no settings for it. New things sent to the model or decided by the user should be logged too.
 - **Secrets** (`config.SECRETS`: the `ollama_api_key`): logged only as whether they are set (`config.without_secrets`),

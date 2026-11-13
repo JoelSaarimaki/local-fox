@@ -173,13 +173,14 @@ Local Fox starts by asking for the project, before the window opens:
 - **Top bar**: the version and three dropdowns for the session: the model, the context size (4 096 tokens
   doubled up to the model's maximum; `/context <size>` sets any other), and the CPU threads Ollama runs the model
   with ("threads auto / 16" when Ollama chooses them on a computer with 16 processors; 1 up to the computer's
-  processors to choose from). Ollama loads the model again with new threads on the next request (about 20 seconds
+  processors, the last marked "(all)", to choose from; for Ollama on another computer only "auto" is listed, and
+  `/threads <n>` sets any number). Ollama loads the model again with new threads on the next request (about 20 seconds
   for gemma4:26b). Fewer threads use less of the CPU, so
   the computer stays cooler and quieter, without limiting other programs; the model may get slower, the more so
   the more of it runs on the CPU. Measured with gemma4:26b, partly on the GPU, on a 16-processor laptop (2026-11-13):
   2 threads took about 25 % of the CPU and 4 threads 31–38 %, against 53–56 % with Ollama's choice of 8, and the
-  replies came at 7–11 tokens a second with all of them.
-  Ollama does not tell its own choice; on a 16-processor laptop its log showed 8, so choosing 8 there changes nothing.
+  replies came at 7–11 tokens a second with all of them. Ollama does not tell its own choice: there, its log showed
+  8, so choosing 8 changes nothing.
   **Export** and the ≡ menu with the other commands are on the right.
 - **Bottom bar**: **Clear** and **Help** on the left, and on the right how much of the context the conversation
   uses and **Send** (**Stop** while the model runs), far apart so that one is not pressed for the other. The
@@ -258,7 +259,7 @@ on macOS and `~/.config/LocalFox` on Linux (or where `LOCAL_FOX_CONFIG` points);
 a clear reads it again.
 
 **The settings view** (`/settings`, or **Settings** in the ≡ menu) shows the same file as a form, with what each
-setting does. **Save** writes it: the model, context size, CPU threads and Ollama address apply at once, the others from the next clear.
+setting does. **Save** writes it: the model, context size, CPU threads and Ollama address apply at once, the font size from the next start, the others from the next clear.
 **Save and clear** applies them all at once. Its **Project tools** tab shows the open project's tools config
 (`.local-fox/tools-config.json`) the same way; settings it does not know are kept, and a saved change asks
 to restart the tools (Save and clear restarts them). The tools' own rules are checked by the tools: a server
@@ -271,8 +272,8 @@ that does not start with the new config shows its error in the feed.
 | `ollama_host` | `http://127.0.0.1:11434` | Where Ollama runs; another computer's address for Ollama there (see [Ollama on another computer](#ollama-on-another-computer)). Applies at once; also set by `/host` |
 | `ollama_api_key` | empty | Your Ollama API key for the web tools (search and fetch through ollama.com; create one at ollama.com/settings/keys). Empty: the web tools are not offered (a key in the tools' own `~/.ollmcp-tools/user-config.json` is not used). Given only to the tools' server when it starts, never to the model, and not written to the log; hidden in the settings view |
 | `model` | `qwen3.6:35b` | Also set by the model menu |
-| `num_ctx` | `65536` | The context size sent with every request; with flint:40b a larger one needs little memory |
-| `num_thread` | `null` | The CPU threads Ollama runs the model with; `null`: auto, Ollama's own choice. Fewer run slower and cooler. Also set for a session in the top bar or by `/threads` |
+| `num_ctx` | `65536` | The context size sent with every request; a larger one needs more memory and can move more of the model to the CPU |
+| `num_thread` | `null` | The CPU threads Ollama runs the model with; `null`: auto, Ollama's own choice. Fewer use less of the CPU; the model may get slower. Also set for a session in the top bar or by `/threads` |
 | `think` | `null` | `null`: on for models that can think; `true`, `false` or a level such as `"high"` |
 | `temperature` | `null` | `null`: the model's own |
 | `seed` | `null` | A fixed seed, for repeatable runs |
@@ -446,7 +447,7 @@ being saved to the same file. A clear starts a new file. Delete the files you do
 The core (`local_fox` without `local_fox.ui`) needs only `ollama` and `mcp`. A small command line runs it:
 
 ```bash
-.venv\Scripts\python -m local_fox.cli --project <folder> [--model flint:40b] [--context 65536] [--yes] [--verbose] [--setup] ["first message"]
+.venv\Scripts\python -m local_fox.cli --project <folder> [--model qwen3.6:35b] [--context 65536] [--yes] [--verbose] [--setup] ["first message"]
 # The folder must be a project; --setup sets it up first (never a drive root or system folder)
 ```
 

@@ -44,7 +44,7 @@ DESCRIPTIONS = {
                       "model, and applies when the tools restart (\"Restart tools and clear\", or opening the project again).",
     "model": "The model, as Ollama names it. Also set by the model menu.",
     "num_ctx": "The context size in tokens, sent with every request. Ollama uses 4 096 tokens when none is sent. A larger "
-               "context needs little memory with flint:40b, but moves more of the model from the GPU to the CPU.",
+               "context needs more memory and can move more of the model from the GPU to the CPU.",
     "num_thread": "The CPU threads Ollama runs the model with; empty leaves it to Ollama, which often takes about half "
                   "of the processors. Fewer threads use less of the CPU, so the computer stays cooler and quieter; the "
                   "model may get slower, the more so the more of it runs on the CPU. Changing it reloads the model. Also set for a session in the top bar or by /threads.",

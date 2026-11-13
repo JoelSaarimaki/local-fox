@@ -35,7 +35,7 @@ from .settings_view import AUTO_THREADS, SettingsDialog, context_sizes
 HELP = f"""Commands:
 /clear            start a new session, with the instructions and the filemap again
 /export           save the conversation as a Markdown file
-/instructions     read the project instructions (.local-fox/instructions.md) again after editing them
+/instructions     read the project instructions again after editing them
 /model [name]     show the installed models, or switch to one
 /context [size]   show the context size and how much the conversation uses, or set the size for this session
 /threads [n|auto] show the CPU threads Ollama uses, or set them for this session
@@ -847,7 +847,7 @@ class MainWindow(QMainWindow):
             self._set_threads(settings["num_thread"])
         if self.session and settings["ollama_host"] != self.session.config["ollama_host"]:
             self._set_host(settings["ollama_host"])  # At once, as the conversation does not depend on the server
-        self._local_notice("The settings were saved to config.json. The model, context size and CPU threads apply now, the "
+        self._local_notice("The settings were saved to config.json. The model, context size, CPU threads and Ollama address apply now, the "
                            "others from the next clear (/clear), and the font size from the next start.")
 
     def _change_rule(self, key: str, path: str, add: bool) -> None:

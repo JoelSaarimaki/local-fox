@@ -340,7 +340,7 @@ class SettingsDialog(QDialog):
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(self.reject)
         save = QPushButton("Save")
-        save.setToolTip("Write config.json; the model, context size and Ollama address apply now, the others from the next clear")
+        save.setToolTip("Write config.json; the model, context size, CPU threads and Ollama address apply now, the others from the next clear")
         save.clicked.connect(lambda: self._save(False))
         save_clear = QPushButton("Save and clear", objectName="primary")
         save_clear.setToolTip("Write config.json and start a new session with the settings")

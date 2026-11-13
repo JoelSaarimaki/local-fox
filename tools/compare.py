@@ -3,7 +3,7 @@ Runs the comparison scenarios of ollmcp-generic-tools (local_ai_tests/compare_sc
 Local Fox, so that the measurements show how a model behaves in Local Fox, with the same checks and summary as
 compare_models.py.
 
-    python tools/compare.py [--tools-repo ../ollmcp-generic-tools] [--models flint:40b,gemma4:26b]
+    python tools/compare.py [--tools-repo ../ollmcp-generic-tools] [--models qwen3.6:35b,flint:40b]
                             [--scenarios plan_new,implement_fix] [--seeds 1,2,3] [--context 32000] [--no-think]
 
 Run it with the Python that has ollmcp-generic-tools and ollmcp installed, as the scenarios' harness needs both.
@@ -104,7 +104,7 @@ async def run(model: str, scenario: dict, seed: int, args, out: Path, cm, harnes
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--tools-repo", default=str(ROOT.parent / "ollmcp-generic-tools"))
-    parser.add_argument("--models", default="flint:40b")
+    parser.add_argument("--models", default="qwen3.6:35b")
     parser.add_argument("--scenarios", default=None)
     parser.add_argument("--seeds", default="1,2,3")
     parser.add_argument("--context", type=int, default=32000)
