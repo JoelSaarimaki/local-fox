@@ -1,8 +1,8 @@
 # Changelog
 
-Local Fox follows [semantic versioning](https://semver.org/): a major version for changes that break what users
-or projects rely on (settings, saved conversations, set-up projects), a minor version for new features, and a
-patch version for fixes.
+Local Fox follows [semantic versioning](https://semver.org/): a minor version for fully new features, a patch
+version for fixes and minor or invisible changes, and a major version only for changes that break what users or
+projects rely on (settings, saved conversations, set-up projects).
 
 ## 1.0.0 (2026-11-13)
 
