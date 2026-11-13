@@ -11,6 +11,8 @@ projects rely on (settings, saved conversations, set-up projects).
   in 8 of 20 edits (qwen3.6:35b). An edit whose text matches is made even if the file changed elsewhere since the
   read, with a note naming the changed lines; replacing a whole file still needs a read of it, unchanged since.
   Projects set up earlier keep working: the old argument their instructions name is ignored.
+- **No note on every partial read** about edit_file and write_file. Instead, write_file refuses to replace a
+  file of which the model has read only part, which the note warned against.
 - **qwen3.6:35b is the default model**, instead of flint:40b: as good in the comparison scenarios, with fewer tool
   errors, at about twice the speed. A `model` already in `config.json` stays as it is.
 
