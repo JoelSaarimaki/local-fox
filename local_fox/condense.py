@@ -39,7 +39,8 @@ SHORTEN_TOOLS = {"read_file_with_metadata", "search_text_in_files"}
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _LINES = re.compile(r"^- Lines: (\d+)-(\d+) of \d+", re.MULTILINE)
 _PY_HEADER = re.compile(r"^(\s*)(?:async\s+def|def|class)\s+(\w+)")
-_MATCH = re.compile(r"^(.+?):(\d+):")
+_MATCH = re.compile(r"^(.+?):(\d+):")  # A match in grep's format, before the tools named each file once
+_ROW = re.compile(r"^(\d+)([:-]) ")  # A match (:) or a context line (-) under its file's path
 MARK = "⋯"
 _BLOCK_PARTS = {"docstring", "imports", "assignments", "statements", "main block"}
 
@@ -263,12 +264,46 @@ def _read_plan(entry: c.Entry) -> Shortening | None:
 
 def _search_plan(entry: c.Entry) -> Shortening | None:
     """
-    Returns what of a text search can be left out: the matches of each file with two or more of them.
+    Returns what of a text search can be left out: the lines of each file with two or more of them. The tools name
+    each file once above its lines ('42: text', '41- text' around a match, '--' between groups); conversations from
+    before have grep's 'path:42: text' on every line, read by _flat_search_units.
     """
     split = _split_response(entry.response)
     if not split:
         return None
     header, fence, lines, rest = split
+    units = _grouped_search_units(lines) if any(_ROW.match(line) for line in lines) else _flat_search_units(lines)
+    if not units:
+        return None
+    note = (f"- Shortened by Local Fox to make room in the context: the matches in files the conversation has not "
+            f"mentioned lately are left out, their line numbers kept ({MARK}).")
+    return Shortening(entry, units, header, fence, lines, rest, note)
+
+def _grouped_search_units(lines: list[str]) -> list[Unit]:
+    """
+    Returns the units of a search that names each file once: a file's lines under its path, which stays, replaced
+    by one line with the line numbers of its matches. The context lines and '--' of the file go with its matches.
+    """
+    units, start = [], 0
+    while start < len(lines):
+        end = start
+        while end + 1 < len(lines) and lines[end + 1]:
+            end += 1
+        rows = lines[start + 1:end + 1]
+        # Only a path with two or more lines under it is a unit: one line would be replaced by one
+        if lines[start] and not _ROW.match(lines[start]) and len(rows) >= 2:
+            numbers = [m.group(1) for m in map(_ROW.match, rows) if m and m.group(2) == ":"]
+            what = f"{len(numbers)} {'match' if len(numbers) == 1 else 'matches'}"
+            marker = f"{MARK} {what} left out, at {'line' if len(numbers) == 1 else 'lines'} {', '.join(numbers)} {MARK}"
+            units.append(Unit(set(), lines[start], start, end, head=1, marker=marker))
+        start = end + 2  # Past the empty line between files
+    return units
+
+def _flat_search_units(lines: list[str]) -> list[Unit]:
+    """
+    Returns the units of a search in grep's format, the path on every line (the tools before they named each file
+    once, in saved conversations): the matches of a file, if they are together, replaced by one line.
+    """
     groups: dict[str, list[tuple[int, str]]] = {}
     for i, line in enumerate(lines):
         m = _MATCH.match(line)
@@ -282,11 +317,7 @@ def _search_plan(entry: c.Entry) -> Shortening | None:
             continue
         marker = f"{file}: {MARK} {len(matches)} matches left out, at lines {', '.join(n for _, n in matches)} {MARK}"
         units.append(Unit(set(), file, indexes[0], indexes[-1], marker=marker))
-    if not units:
-        return None
-    note = (f"- Shortened by Local Fox to make room in the context: the matches in files the conversation has not "
-            f"mentioned lately are left out, their line numbers kept ({MARK}).")
-    return Shortening(entry, units, header, fence, lines, rest, note)
+    return units
 
 def plan(entry: c.Entry) -> Shortening | None:
     """

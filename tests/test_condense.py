@@ -71,6 +71,27 @@ def test_a_search_keeps_the_matches_in_files_mentioned_since():
     assert "src/app.py:40: refresh()" in short
     assert "src/other.py: ⋯ 30 matches left out, at lines 10, 11," in short and "src/other.py:12:" not in short
 
+def search(lines):
+    return tool("search_text_in_files", {"query": "refresh"},
+                "- Found matches in the project:\n\n```text\n" + "\n".join(lines) + "\n```")
+
+def test_a_search_naming_each_file_once_keeps_the_files_mentioned_since_and_their_paths():
+    lines = (["src/app.py"] + [f"{n}: refresh()" for n in (3, 40, 77)] + [""]
+             + ["src/other.py"] + [f"{n}: refresh()  # a long line of matched text here" for n in range(10, 40)] + [""]
+             + ["src/one.py", "5: refresh()"])
+    short = condense.shorten(search(lines), "app.py calls it at startup")
+    assert "src/app.py\n3: refresh()\n40: refresh()" in short
+    assert "src/other.py\n⋯ 30 matches left out, at lines 10, 11," in short and "12: refresh()  #" not in short
+    assert "src/one.py\n5: refresh()" in short  # One line is not worth a marker
+
+def test_a_searchs_context_lines_go_with_their_files_matches():
+    rows = []
+    for n in range(10, 100, 10):
+        rows += [f"{n - 1}- before the match, a line of context", f"{n}: refresh()", f"{n + 1}- after the match, more context", "--"]
+    lines = ["src/app.py", "3: refresh()", "", "src/other.py"] + rows[:-1]
+    short = condense.shorten(search(lines), "app.py")
+    assert short.endswith("src/app.py\n3: refresh()\n\nsrc/other.py\n⋯ 9 matches left out, at lines 10, 20, 30, 40, 50, 60, 70, 80, 90 ⋯\n```")
+
 def test_what_is_not_shortened():
     assert condense.shorten(read("cart.py", PY), "first second Cart total clear") is None  # Everything mentioned
     assert condense.shorten(read("cart.py", "def f():\n    return 1"), "") is None  # Too little to gain
