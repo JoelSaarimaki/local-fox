@@ -4,6 +4,14 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.1 (2026-11-14)
+
+- Texts that agree with what Local Fox does: Save's tooltip and notice name the four settings that apply at once,
+  the `num_ctx` description says that a larger context needs more memory, and the `/instructions` help no longer
+  names a folder that not every project has.
+- The bundled tools are version 1.0.0: the same tools as in 1.1.0, now numbered, with their documentation brought
+  up to date and the instructions template naming the tools in full.
+
 ## 1.1.0 (2026-11-14)
 
 - **Edits no longer need the file's hash.** The bundled tools remember what the model has read of each file in
