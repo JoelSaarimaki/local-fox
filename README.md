@@ -171,7 +171,11 @@ Local Fox starts by asking for the project, before the window opens:
 ## The window
 
 - **Top bar**: the version, the model (click to switch), the context size (click to choose another for the session,
-  from 4 096 tokens doubled up to the model's maximum; `/context <size>` sets any other).
+  from 4 096 tokens doubled up to the model's maximum; `/context <size>` sets any other), and the CPU threads
+  Ollama runs the model with: "threads auto / 16" when Ollama chooses them on a computer with 16 processors.
+  Click it to choose a number for the session, from 1 to the computer's processors. Fewer threads make the model
+  slower and the computer cooler and quieter, without limiting other programs; reading the prompt slows the most.
+  Ollama does not tell its own choice; on a 16-processor laptop its log showed 8, so choosing 8 there changes nothing.
   **Export** and the ≡ menu with the other commands are on the right.
 - **Bottom bar**: **Clear** and **Help** on the left, and on the right how much of the context the conversation
   uses and **Send** (**Stop** while the model runs), far apart so that one is not pressed for the other. The
@@ -240,7 +244,7 @@ Local Fox starts by asking for the project, before the window opens:
   in. Pasting into the prompt only inserts the text, whatever it contains (line breaks, a leading `/`): only
   Enter typed by you sends. The filemap's **Copy path** and **Add path to prompt** are the only other ways.
 
-Commands: `/clear`, `/export`, `/instructions`, `/model [name]`, `/context [size]`, `/host [address]`, `/settings`, `/config`,
+Commands: `/clear`, `/export`, `/instructions`, `/model [name]`, `/context [size]`, `/threads [n|auto]`, `/host [address]`, `/settings`, `/config`,
 `/log`, `/setup`, `/reopen`, `/project`, `/help`.
 
 ## Settings
@@ -250,7 +254,7 @@ on macOS and `~/.config/LocalFox` on Linux (or where `LOCAL_FOX_CONFIG` points);
 a clear reads it again.
 
 **The settings view** (`/settings`, or **Settings** in the ≡ menu) shows the same file as a form, with what each
-setting does. **Save** writes it: the model, context size and Ollama address apply at once, the others from the next clear.
+setting does. **Save** writes it: the model, context size, CPU threads and Ollama address apply at once, the others from the next clear.
 **Save and clear** applies them all at once. Its **Project tools** tab shows the open project's tools config
 (`.local-fox/tools-config.json`) the same way; settings it does not know are kept, and a saved change asks
 to restart the tools (Save and clear restarts them). The tools' own rules are checked by the tools: a server
@@ -264,6 +268,7 @@ that does not start with the new config shows its error in the feed.
 | `ollama_api_key` | empty | Your Ollama API key for the web tools (search and fetch through ollama.com; create one at ollama.com/settings/keys). Empty: the web tools are not offered (a key in the tools' own `~/.ollmcp-tools/user-config.json` is not used). Given only to the tools' server when it starts, never to the model, and not written to the log; hidden in the settings view |
 | `model` | `flint:40b` | Also set by the model menu |
 | `num_ctx` | `65536` | The context size sent with every request; with flint:40b a larger one needs little memory |
+| `num_thread` | `null` | The CPU threads Ollama runs the model with; `null`: Ollama's choice. Fewer run slower and cooler. Also set for a session in the top bar or by `/threads` |
 | `think` | `null` | `null`: on for models that can think; `true`, `false` or a level such as `"high"` |
 | `temperature` | `null` | `null`: the model's own |
 | `seed` | `null` | A fixed seed, for repeatable runs |

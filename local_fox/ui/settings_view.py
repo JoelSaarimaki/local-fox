@@ -19,14 +19,16 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBox
                                QScrollArea, QSizePolicy, QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
 from .. import config as config_module
+from ..ollama_server import processors
 from .. import tools_config
 from ..conversation import format_number
 
 # Settings whose default is null, by what they take
-KINDS = {"think": "think", "temperature": "float?", "seed": "int?", "max_steps": "int?"}
+KINDS = {"think": "think", "temperature": "float?", "seed": "int?", "max_steps": "int?", "num_thread": "int?"}
 # The smallest and largest of the whole-number settings
 RANGES = {"font_size": (6, 40), "filemap_max_tokens": (1, 1_000_000)}
 THINK_CHOICES = ["", "true", "false", "low", "medium", "high"]
+OLLAMAS_CHOICE = "Ollama's choice"
 
 def kind_of(key: str) -> str:
     """
@@ -93,6 +95,16 @@ class AppSettingsForm(QWidget):
                 field.addItem(f"{format_number(size)} tokens", size)
             field.setCurrentIndex(field.findData(value))
             return field
+        if key == "num_thread":
+            # Ollama's choice, or a number up to this computer's processors (or the value, set for another computer)
+            field = QComboBox()
+            field.setMinimumWidth(160)
+            field.addItem(OLLAMAS_CHOICE, None)
+            count = processors()
+            for threads in range(1, max(count, value or 0) + 1):
+                field.addItem(f"{threads} (all)" if threads == count else str(threads), threads)
+            field.setCurrentIndex(max(field.findData(value), 0))
+            return field
         if kind == "int" and isinstance(value, int):
             field = QSpinBox()
             field.setMinimumWidth(160)
@@ -141,6 +153,9 @@ class AppSettingsForm(QWidget):
                 continue
             if isinstance(field, QSpinBox):
                 values[key] = field.value()
+                continue
+            if key == "num_thread":
+                values[key] = field.currentData()  # None for Ollama's choice
                 continue
             if isinstance(field, QComboBox) and field.currentData() is not None:
                 values[key] = field.currentData()  # A choice with its value, e.g. the context size

@@ -186,6 +186,14 @@ def normalize_host(text: str) -> str | None:
         text = f"{text}:{DEFAULT_PORT}"
     return text
 
+def processors() -> int:
+    """
+    Returns how many processors (logical cores) Local Fox may use on this computer: the most CPU threads it offers
+    for Ollama. Ollama does not tell its own default, which is often about half of them.
+    """
+    count = os.process_cpu_count() if hasattr(os, "process_cpu_count") else os.cpu_count()
+    return count or 1
+
 def is_local(host: str) -> bool:
     """
     Whether the address is this computer, where 'ollama serve' can be started.

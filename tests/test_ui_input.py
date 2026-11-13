@@ -291,3 +291,23 @@ def test_the_input_shows_seven_lines_at_any_font_size(app):
         line = math.ceil(QFontMetricsF(prompt.font()).lineSpacing())
         assert (prompt.viewport().height() - 2 * prompt.document().documentMargin()) // line == PROMPT_LINES == 7
         window.close()
+
+def test_the_threads_menu_offers_ollamas_choice_and_this_computers_processors(app, monkeypatch):
+    from local_fox import ollama_server
+    from local_fox.ui.main_window import MainWindow
+    monkeypatch.setattr(ollama_server, "processors", lambda: 4)
+    window = MainWindow(dict(config.DEFAULTS))
+    assert window.threads_button.text() == "threads auto / 4"
+    set_to = []
+    window._set_threads = set_to.append
+    errors = []
+    window._local_error = errors.append
+    window.session = SimpleNamespace(num_thread=None, config={"ollama_host": "http://127.0.0.1:11434"})
+    window._fill_threads_menu()
+    labels = [a.text() for a in window.threads_menu.actions() if not a.isSeparator()]
+    assert labels[1:] == ["Ollama's choice (often about half)", "1", "2", "3", "4 (all)"]
+    assert window.threads_menu.actions()[1].isChecked()
+    window._threads_command("2")
+    window._threads_command("auto")
+    window._threads_command("5")  # More than this computer has: refused
+    assert set_to == [2, None] and "from 1 to 4" in errors[0]

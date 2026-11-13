@@ -18,6 +18,7 @@ DEFAULTS = {
     # flint:40b is preferred: its calls by bare tool names, which ollmcp skips, run in Local Fox (see AGENTS.md)
     "model": "flint:40b",
     "num_ctx": 65536,
+    "num_thread": None,
     "think": None,
     "temperature": None,
     "seed": None,
@@ -44,6 +45,9 @@ DESCRIPTIONS = {
     "model": "The model, as Ollama names it. Also set by the model menu.",
     "num_ctx": "The context size in tokens, sent with every request. Ollama uses 4 096 tokens when none is sent. A larger "
                "context needs little memory with flint:40b, but moves more of the model from the GPU to the CPU.",
+    "num_thread": "The CPU threads Ollama runs the model with; empty leaves it to Ollama, which often takes about half "
+                  "of the processors. Fewer threads make the model slower and the computer cooler and quieter; reading "
+                  "the prompt slows the most. Also set for a session in the top bar or by /threads.",
     "think": "Thinking: empty turns it on for models that can think, true or false forces it, and a level such as "
              "low or high is passed on to models that take one.",
     "temperature": "The model's temperature; empty uses the model's own.",
@@ -98,6 +102,8 @@ def validate(values: dict, where: str = "config.json") -> dict:
     config = {**DEFAULTS, **values}
     if not _whole(config["num_ctx"], 512):
         raise ConfigError(f"{where}: 'num_ctx' must be a whole number of at least 512.")
+    if config["num_thread"] is not None and not _whole(config["num_thread"], 1):
+        raise ConfigError(f"{where}: 'num_thread' must be a whole number of at least 1, or null.")
     if config["max_steps"] is not None and not _whole(config["max_steps"], 1):
         raise ConfigError(f"{where}: 'max_steps' must be a whole number of at least 1, or null.")
     if config["seed"] is not None and not _whole(config["seed"], 0):

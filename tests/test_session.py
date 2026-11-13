@@ -874,3 +874,13 @@ def test_another_ollama_address_keeps_the_conversation_and_checks_the_model_ther
     assert session.client.host == "http://192.168.1.20:11434" and session.config["ollama_host"] == "http://192.168.1.20:11434"
     assert asked == [("http://192.168.1.20:11434", "flint:40b")] and session.max_context == 262144
     assert session.entries == entries and session.messages == messages  # The conversation stays
+
+def test_cpu_threads_are_sent_only_when_set(tmp_path):
+    session, client, _ = make_session(tmp_path, [[chunk("One", done=True)], [chunk("Two", done=True)]])
+    asyncio.run(session.send("Hi"))
+    assert "num_thread" not in client.requests[0]["options"]  # Ollama's own choice
+    assert session.set_threads(0) and session.set_threads(True) and session.num_thread is None
+    assert session.set_threads(4) is None
+    asyncio.run(session.send("Again"))
+    assert client.requests[1]["options"]["num_thread"] == 4
+    assert '"num_thread": 4' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")

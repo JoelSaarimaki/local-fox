@@ -129,6 +129,7 @@ class Session:
         self.log_dir = log_dir or data_dir() / "logs"
         self.model: str = config["model"]
         self.num_ctx: int = config["num_ctx"]
+        self.num_thread: int | None = config["num_thread"]  # None: Ollama's own choice
         self.client = ollama.AsyncClient(host=config["ollama_host"])
         self.servers: Servers | None = None
         self.rules: Rules | None = None
@@ -521,6 +522,18 @@ class Session:
         self.frontend.status()
         return None
 
+    def set_threads(self, threads: int | None) -> str | None:
+        """
+        Sets the CPU threads Ollama runs the model with for the session, or None for Ollama's own choice.
+        Returns an error message for a number that is not a whole number of at least 1.
+        """
+        if threads is not None and (isinstance(threads, bool) or not isinstance(threads, int) or threads < 1):
+            return "The CPU threads must be a whole number of at least 1."
+        self.num_thread = threads
+        self.log.write("setting", num_thread=threads)
+        self.frontend.status()
+        return None
+
     def larger_context(self) -> str | None:
         """
         Doubles the context size, up to the model's largest.
@@ -546,6 +559,7 @@ class Session:
             self.model = config["model"]
             self.capabilities = None
         self.num_ctx = config["num_ctx"]
+        self.num_thread = config["num_thread"]
 
     async def set_host(self, host: str) -> str | None:
         """
@@ -963,6 +977,8 @@ class Session:
 
     def _options(self) -> dict:
         options = {"num_ctx": self.num_ctx}
+        if self.num_thread is not None:
+            options["num_thread"] = self.num_thread
         if self.config.get("temperature") is not None:
             options["temperature"] = self.config["temperature"]
         if self.config.get("seed") is not None:

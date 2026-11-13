@@ -30,7 +30,7 @@ from .filemap_view import FilemapView
 from .ollama_panel import OllamaPanel
 from .project_dialog import choose_project
 from .prompt import PromptInput
-from .settings_view import SettingsDialog, context_sizes
+from .settings_view import OLLAMAS_CHOICE, SettingsDialog, context_sizes
 
 HELP = f"""Commands:
 /clear            start a new session, with the instructions and the filemap again
@@ -38,6 +38,7 @@ HELP = f"""Commands:
 /instructions     read the project instructions (.local-fox/instructions.md) again after editing them
 /model [name]     show the installed models, or switch to one
 /context [size]   show the context size and how much the conversation uses, or set the size for this session
+/threads [n|auto] show the CPU threads Ollama uses, or set them for this session: fewer run cooler and slower
 /host [address]   show the Ollama address, or set it, e.g. /host 192.168.1.20 for Ollama on another computer
 /settings         show the settings of config.json
 /config           open the folder of config.json; a clear reads it again
@@ -117,10 +118,17 @@ class MainWindow(QMainWindow):
         self.model_menu.aboutToShow.connect(self._fill_model_menu)
         self.model_button.setMenu(self.model_menu)
         self.context_button = _button("", self._ask_context, "flat", "The context size: click to change it for this session")
+        self.threads_button = QToolButton(objectName="flat")
+        self.threads_button.setPopupMode(QToolButton.InstantPopup)
+        self.threads_button.setToolTip("The CPU threads Ollama runs the model with: fewer make the model slower and the "
+                                       "computer cooler and quieter. Click to change them for this session.")
+        self.threads_menu = QMenu(self)
+        self.threads_menu.aboutToShow.connect(self._fill_threads_menu)
+        self.threads_button.setMenu(self.threads_menu)
         self.usage_label = QLabel("", objectName="dim")
         self.usage_label.setToolTip("How much of the context the conversation uses")
         self.project_label = QLabel("", objectName="dim")
-        for widget in (title, self.model_button, self.context_button):
+        for widget in (title, self.model_button, self.context_button, self.threads_button):
             top.addWidget(widget)
             top.addSpacing(10)
         top.addStretch(1)
@@ -390,6 +398,9 @@ class MainWindow(QMainWindow):
         num_ctx = s.num_ctx if s else self.settings["num_ctx"]
         self.model_button.setText(f"{model} ▾")
         self.context_button.setText(f"ctx {format_number(num_ctx)}")
+        threads = s.num_thread if s else self.settings["num_thread"]
+        local = ollama_server.is_local(s.config["ollama_host"] if s else self.settings["ollama_host"])
+        self.threads_button.setText(f"threads {threads or 'auto'}" + (f" / {ollama_server.processors()}" if local else ""))
         if s:
             self.usage_label.setText(f"{format_number(s.used_tokens)} / {format_number(num_ctx)} tokens")
             self.filemap.set_changed(s.changed_files)
@@ -709,7 +720,7 @@ class MainWindow(QMainWindow):
             handler = {
                 "/clear": lambda a: self._clear(), "/export": lambda a: self._export(),
                 "/instructions": lambda a: self._reload_instructions(), "/model": self._model_command,
-                "/context": self._context_command, "/host": self._host_command,
+                "/context": self._context_command, "/host": self._host_command, "/threads": self._threads_command,
                 "/config": lambda a: self._open_config(), "/log": lambda a: self._open_log(),
                 "/settings": lambda a: self._open_settings(), "/setup": lambda a: self._set_up(),
                 "/reopen": lambda a: self._reopen_latest(),
@@ -842,10 +853,12 @@ class MainWindow(QMainWindow):
             self._switch_model(settings["model"])  # As the model menu does, so that a clear keeps it
         if self.session and settings["num_ctx"] != previous.get("num_ctx"):
             self._set_context(settings["num_ctx"])
+        if self.session and settings["num_thread"] != previous.get("num_thread"):
+            self._set_threads(settings["num_thread"])
         if self.session and settings["ollama_host"] != self.session.config["ollama_host"]:
             self._set_host(settings["ollama_host"])  # At once, as the conversation does not depend on the server
-        self._local_notice("The settings were saved to config.json. The model and context size apply now, the others "
-                           "from the next clear (/clear), and the font size from the next start.")
+        self._local_notice("The settings were saved to config.json. The model, context size and CPU threads apply now, the "
+                           "others from the next clear (/clear), and the font size from the next start.")
 
     def _change_rule(self, key: str, path: str, add: bool) -> None:
         """
@@ -1085,6 +1098,75 @@ class MainWindow(QMainWindow):
                 session.notice(f"The context size is {format_number(size)} tokens for this session. Ollama reloads the model with it "
                                "on the next request, which can take a while; a larger size needs more memory and can move more of the model to the CPU.")
         self.runner.call(set_size)
+
+    def _fill_threads_menu(self) -> None:
+        """
+        Fills the CPU threads menu: Ollama's choice, and every number up to this computer's processors, which
+        are the most Ollama can use. For Ollama on another computer, its processors are unknown here.
+        """
+        menu = self.threads_menu
+        menu.clear()
+        if not self.session:
+            menu.addAction("Open a project first").setEnabled(False)
+            return
+        current = self.session.num_thread
+        local = ollama_server.is_local(self.session.config["ollama_host"])
+        count = ollama_server.processors()
+        heading = (f"CPU threads for this session (this computer has {count} processors)" if local
+                   else "CPU threads for this session (Ollama runs on another computer: /threads <n> sets any number)")
+        menu.addAction(heading).setEnabled(False)
+        choice = menu.addAction(f"{OLLAMAS_CHOICE} (often about half)", lambda: self._set_threads(None))
+        choice.setCheckable(True)
+        choice.setChecked(current is None)
+        if local:
+            menu.addSeparator()
+            for threads in range(1, count + 1):
+                action = menu.addAction(f"{threads} (all)" if threads == count else str(threads),
+                                        lambda t=threads: self._set_threads(t))
+                action.setCheckable(True)
+                action.setChecked(current == threads)
+
+    def _threads_command(self, argument: str) -> None:
+        """
+        /threads alone tells the CPU threads Ollama uses; /threads <n> or /threads auto sets them for the session.
+        """
+        if not self.session:
+            return
+        s = self.session
+        local = ollama_server.is_local(s.config["ollama_host"])
+        count = ollama_server.processors()
+        if not argument:
+            of = f" This computer has {count} processors." if local else " Ollama runs on another computer."
+            used = (f"Ollama runs the model with {s.num_thread} CPU threads." if s.num_thread
+                    else "Ollama chooses the CPU threads itself, often about half of the processors.")
+            self._local_notice(used + of + " /threads <n> sets them for this session, /threads auto leaves them to Ollama.")
+            return
+        if argument.lower() in ("auto", "ollama"):
+            self._set_threads(None)
+            return
+        try:
+            threads = int(argument)
+        except ValueError:
+            self._local_error("Give the CPU threads as a number, e.g. /threads 6, or /threads auto for Ollama's choice.")
+            return
+        if local and not 1 <= threads <= count:
+            self._local_error(f"This computer has {count} processors: give a number from 1 to {count}.")
+            return
+        self._set_threads(threads)
+
+    def _set_threads(self, threads: int | None) -> None:
+        session = self.session
+
+        def set_threads():
+            error = session.set_threads(threads)
+            if error:
+                session.error(error)
+                return
+            what = (f"Ollama runs the model with {threads} CPU threads for this session" if threads
+                    else "Ollama chooses the CPU threads itself for this session")
+            session.notice(f"{what}, from the next request, which may reload the model and take a while. Fewer threads make "
+                           "the model slower and the computer cooler; reading the prompt slows the most.")
+        self.runner.call(set_threads)
 
     def _ask_context(self) -> None:
         if not self.session:
