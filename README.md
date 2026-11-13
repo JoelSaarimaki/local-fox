@@ -176,7 +176,8 @@ Local Fox starts by asking for the project, before the window opens:
 - **Bottom bar**: **Clear** and **Help** on the left, and on the right how much of the context the conversation
   uses and **Send** (**Stop** while the model runs), far apart so that one is not pressed for the other. The
   filemap reaches down to it; the prompt is as wide as the feed above it.
-- **Filemap** on the left: the project folder. A click on a folder opens or closes it; right-click a file or
+- **Filemap** on the left: the project folder. A click on a folder opens or closes it, and a click on a file
+  opens it for reading in a tab beside the feed (see **Files** below); right-click a file or
   folder for **Add path to prompt** (relative to the project folder, as the tools take paths) and **Copy path**.
   Forbidden files are darker, read-only files are marked `ro`, ignored folders are dimmed, and the files the AI
   changed in the session are orange.
@@ -216,6 +217,13 @@ Local Fox starts by asking for the project, before the window opens:
   one before it collapses: a tool call to one line with the tool and its main argument, thinking to its title, and
   an answer to its first two lines. Click a collapsed line to open it again; what you open stays open. Your
   prompts are always shown whole. This also keeps a long conversation quick to show.
+- **Files**: a file clicked in the filemap opens in a tab after **Conversation**, above the notice bar and the
+  prompt, which stay as they are. Markdown is shown rendered, with **Rendered** and **Raw** to switch to its text;
+  other text files, such as code, are shown as raw text. A click on an open file shows its tab again, and **×**
+  closes it. The file is read again when it changes, e.g. when the model edits it. Only you see it: nothing of it
+  goes to the model. Links in Markdown open in the browser, or, to another file of the project, in a tab of their own.
+  Binary files and files over 2 MB are not shown. Sending a message or a command shows the conversation again, and
+  while a question waits there, its tab is marked **Conversation •**. The tabs close when another project opens.
 - **Notice bar**: approvals of tool calls (**Allow**, **Allow all for this session**, **Skip**, **Stop**) and
   other decisions, such as **Larger context** when a reply stopped because the context was full.
 - **Auto mode**, the checkbox beside **Send**: tool calls run without asking, and the questions that would pause

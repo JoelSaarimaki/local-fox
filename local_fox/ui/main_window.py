@@ -24,6 +24,7 @@ from ..session import RESTART_TOOLS, Session, auto_choice
 from ..session_log import LOG_NAME
 from . import theme
 from .bridge import AsyncRunner, Bridge, QtFrontend
+from .document_view import DocumentTabs
 from .feed import Feed
 from .filemap_view import FilemapView
 from .ollama_panel import OllamaPanel
@@ -47,7 +48,7 @@ HELP = f"""Commands:
 /help             show this help
 
 Keys: Enter sends, Shift+Enter adds a line, Up and Down recall sent messages, Esc stops the model.
-Right-click a file in the filemap to add its path to the prompt."""
+Click a file in the filemap to view it in a tab; right-click it to add its path to the prompt."""
 
 REOPEN = "Reopen it"
 # Closes a notice's bar without its actions. Only notices get it: a question the session waits on (an approval, the
@@ -183,7 +184,9 @@ class MainWindow(QMainWindow):
         column = QVBoxLayout(conversation)
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(0)
-        column.addWidget(self.feed, 1)
+        # The feed is the first tab; files clicked in the filemap open in tabs beside it
+        self.tabs = DocumentTabs(self.feed, font)
+        column.addWidget(self.tabs, 1)
         column.addWidget(self.notice_bar)
         column.addWidget(self.prompt)
         splitter = QSplitter(Qt.Horizontal)
@@ -226,6 +229,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence(Qt.Key_Escape), self, activated=self._stop)
         self.filemap.add_to_prompt.connect(self.prompt.insert_text)
         self.filemap.change_rule.connect(self._change_rule)
+        self.filemap.open_file.connect(self.tabs.open_file)
         self.bridge.reset.connect(self._on_reset)
         self.bridge.entry_changed.connect(self._on_entry)
         self.bridge.status.connect(self._update_status)
@@ -300,6 +304,7 @@ class MainWindow(QMainWindow):
         self._watch_tools_config()
         session = self.session
         self.filemap.set_project(project, Rules(project))
+        self.tabs.close_all(project)
         self.feed.set_entries([c.Entry(c.NOTICE, text=f"Starting the MCP servers of {project.as_posix()}…")])
 
         def started(_):
@@ -612,6 +617,7 @@ class MainWindow(QMainWindow):
 
     def _hide_notice(self) -> None:
         self._clear_notice_buttons()
+        self.tabs.mark_conversation(False)
         self.notice_bar.hide()
         self._decision = None
         self._choose = None
@@ -626,6 +632,7 @@ class MainWindow(QMainWindow):
             self._hide_notice()
         self._show_notice(question, options, choose)
         self._decision_options, self._choose = list(options), choose
+        self.tabs.mark_conversation(True)
         self.feed.scroll_to_bottom()
 
     def _set_auto(self, on: bool) -> None:
@@ -709,6 +716,7 @@ class MainWindow(QMainWindow):
                 "/project": lambda a: self._open_project(), "/help": lambda a: self._local_notice(HELP),
             }.get(command.lower())
             if handler:
+                self.tabs.show_conversation()  # What the command says is in the feed
                 handler(argument.strip())
                 return None
         if not self.session:
@@ -721,6 +729,7 @@ class MainWindow(QMainWindow):
         if self.notice_bar.isVisible() and self._decision is None:
             self._hide_notice()
         self._turn = self._run(self.session.send(text))
+        self.tabs.show_conversation()
         self.feed.scroll_to_bottom()
         return None
 

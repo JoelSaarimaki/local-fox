@@ -1,6 +1,7 @@
 """
 The filemap: the project folder as a tree, with forbidden files darker, read-only files marked, ignored folders
-dimmed, and the files the AI changed in the session highlighted. It refreshes when files change. Its menu adds
+dimmed, and the files the AI changed in the session highlighted. It refreshes when files change. A click on a
+file opens it for viewing in a tab beside the feed (document_view.py). Its menu adds
 paths to the prompt, and lets the user allow, forbid or make read-only a path in the project's tools config.
 """
 from pathlib import Path
@@ -69,6 +70,7 @@ class ProjectModel(QFileSystemModel):
 class FilemapView(QTreeView):
     add_to_prompt = Signal(str)
     change_rule = Signal(str, str, bool)  # Path list of the tools config, the path, add (or remove)
+    open_file = Signal(str)  # A file the user clicked, to view in a tab
 
     def __init__(self):
         super().__init__()
@@ -99,8 +101,13 @@ class FilemapView(QTreeView):
         self.viewport().update()
 
     def _clicked(self, index: QModelIndex) -> None:
+        """
+        A click opens or closes a folder, and opens a file for viewing in a tab beside the feed.
+        """
         if self.model_.isDir(index):
             self.setExpanded(index, not self.isExpanded(index))
+        else:
+            self.open_file.emit(self.model_.filePath(index))
 
     def prompt_path(self, path: str) -> str:
         """
