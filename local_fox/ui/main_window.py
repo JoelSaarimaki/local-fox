@@ -38,7 +38,7 @@ HELP = f"""Commands:
 /instructions     read the project instructions (.local-fox/instructions.md) again after editing them
 /model [name]     show the installed models, or switch to one
 /context [size]   show the context size and how much the conversation uses, or set the size for this session
-/threads [n|auto] show the CPU threads Ollama uses, or set them for this session: fewer run cooler and slower
+/threads [n|auto] show the CPU threads Ollama uses, or set them for this session
 /host [address]   show the Ollama address, or set it, e.g. /host 192.168.1.20 for Ollama on another computer
 /settings         show the settings of config.json
 /config           open the folder of config.json; a clear reads it again
@@ -1154,8 +1154,7 @@ class MainWindow(QMainWindow):
                 return
             what = (f"Ollama runs the model with {threads} CPU threads for this session" if threads
                     else "Ollama chooses the CPU threads itself for this session")
-            session.notice(f"{what}, from the next request, for which Ollama loads the model again (about 20 seconds for gemma4:26b). Fewer threads use "
-                           "less of the CPU and keep the computer cooler; the model may get slower, the more so the more of it runs on the CPU.")
+            session.notice(f"{what}, from the next request, for which Ollama loads the model again (about 20 seconds for gemma4:26b).")
         self.runner.call(set_threads)
 
     def _dropdown(self, tip: str, fill) -> tuple[QToolButton, QMenu]:
