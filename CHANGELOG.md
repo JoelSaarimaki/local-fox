@@ -4,6 +4,14 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.0 (2026-11-14)
+
+- **Edits no longer need the file's hash.** The bundled tools remember what the model has read of each file in
+  the conversation, so the model no longer copies a SHA-256 into every edit, which models left out or miscopied
+  in 8 of 20 edits (qwen3.6:35b). An edit whose text matches is made even if the file changed elsewhere since the
+  read, with a note naming the changed lines; replacing a whole file still needs a read of it, unchanged since.
+  Projects set up earlier keep working: the old argument their instructions name is ignored.
+
 ## 1.0.3 (2026-11-13)
 
 - **Text search results name each file once**, above its lines, instead of on every line: about a quarter less
