@@ -110,7 +110,7 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   a notice (`Session._same_failure`), the calls after it answered `SAME_FAILURES_STOPPED`. It is not a question, so
   auto mode does not go past it: gemma4:26b sent one failing edit four times (2026-11-11) with auto mode on.
 - **Viewing files** (`ui/document_view.py`): a click on a file in the filemap opens it read-only in a tab beside
-  the feed (`DocumentTabs`, the feed its first tab, which cannot be closed); Markdown rendered or raw, other text raw.
+  the feed (`DocumentTabs`, the feed its first tab, which cannot be closed); Markdown rendered, other text raw, with nothing above the text (the tab has the name, its tooltip the path).
   It is the user's alone: nothing of it goes to the model or the session, so it needs no entry in the feed.
   Only the user's own actions (sending, a command) switch back to the conversation; a waiting question marks its tab.
 - **No queue**: while a turn runs (or was sent and has not started, `MainWindow._busy`), a message is not taken

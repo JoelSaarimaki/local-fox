@@ -1,22 +1,21 @@
 """
 The files the user opened from the filemap, in tabs beside the conversation feed. A Markdown file is shown
-rendered, with a switch to its raw text; every other text file is shown as raw text. They are only for the user
+rendered; every other text file is shown as raw text. They are only for the user
 to read: nothing here goes to the model, and nothing can be edited. An open file is read again when it changes on
 disk, so a file the model edits shows its new text.
 """
+import html
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import QDesktopServices, QFont, QTextOption
-from PySide6.QtWidgets import (QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QStackedWidget, QTabBar,
-                               QTabWidget, QTextBrowser, QToolButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import QPlainTextEdit, QTabBar, QTabWidget, QTextBrowser, QToolButton, QVBoxLayout, QWidget
 
 from . import theme
 from .render import md
 
 MARKDOWN_SUFFIXES = {".md", ".markdown", ".mdown", ".mkd"}
 MAX_BYTES = 2_000_000  # Larger files are not shown: a text view of megabytes is slow and rarely what is wanted
-RENDERED, RAW = "Rendered", "Raw"
 
 def is_markdown(path: Path) -> bool:
     return path.suffix.lower() in MARKDOWN_SUFFIXES
@@ -41,7 +40,8 @@ def read_document(path: Path) -> tuple[str, str]:
 
 class DocumentView(QWidget):
     """
-    One open file: its path and, for Markdown, the "Rendered" / "Raw" switch above the text.
+    One open file: Markdown rendered, any other text as it is. The tab shows the file's name, and its tooltip
+    the path, so the view has nothing above the text.
     """
     open_file = Signal(str)  # A link in rendered Markdown to another file of the project
 
@@ -50,45 +50,25 @@ class DocumentView(QWidget):
         self.path = path
         self.root = root
         self.markdown = is_markdown(path)
-        self.mode = RENDERED if self.markdown else RAW
+        self.relative = path.relative_to(root).as_posix() if root and path.is_relative_to(root) else path.as_posix()
 
-        bar = QHBoxLayout()
-        bar.setContentsMargins(8, 4, 8, 4)
-        shown = path.relative_to(root).as_posix() if root and path.is_relative_to(root) else path.as_posix()
-        self.path_label = QLabel(shown, objectName="dim")
-        self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        bar.addWidget(self.path_label, 1)
-        self.mode_buttons: dict[str, QPushButton] = {}
         if self.markdown:
-            for mode in (RENDERED, RAW):
-                button = QPushButton(mode, objectName="flat")
-                button.setCursor(Qt.PointingHandCursor)
-                button.clicked.connect(lambda checked=False, m=mode: self.set_mode(m))
-                bar.addWidget(button)
-                self.mode_buttons[mode] = button
-
-        self.rendered = QTextBrowser()
-        self.rendered.setOpenLinks(False)
-        self.rendered.setFont(font)
-        self.rendered.document().setDefaultFont(font)
-        self.rendered.document().setDefaultStyleSheet(theme.feed_css())
-        self.rendered.document().setDocumentMargin(10)
-        self.rendered.setSearchPaths([str(path.parent)])  # Images of the Markdown, by their relative paths
-        self.rendered.anchorClicked.connect(self._link)
-        self.raw = QPlainTextEdit()
-        self.raw.setReadOnly(True)
-        self.raw.setFont(font)
-        self.raw.setWordWrapMode(QTextOption.NoWrap)  # Code keeps its lines; long ones scroll sideways
-        self.raw.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
-        self.stack = QStackedWidget()
-        self.stack.addWidget(self.rendered)
-        self.stack.addWidget(self.raw)
-
+            self.view = QTextBrowser()
+            self.view.setOpenLinks(False)
+            self.view.document().setDefaultFont(font)
+            self.view.document().setDefaultStyleSheet(theme.feed_css())
+            self.view.document().setDocumentMargin(10)
+            self.view.setSearchPaths([str(path.parent)])  # Images of the Markdown, by their relative paths
+            self.view.anchorClicked.connect(self._link)
+        else:
+            self.view = QPlainTextEdit()
+            self.view.setReadOnly(True)
+            self.view.setWordWrapMode(QTextOption.NoWrap)  # Code keeps its lines; long ones scroll sideways
+            self.view.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+        self.view.setFont(font)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addLayout(bar)
-        layout.addWidget(self.stack, 1)
+        layout.addWidget(self.view)
 
         # Editors and the tools often replace a file instead of writing it, which ends the watch: it is set again
         self.watcher = QFileSystemWatcher(self)
@@ -97,9 +77,7 @@ class DocumentView(QWidget):
         self._reload_timer.setSingleShot(True)
         self._reload_timer.setInterval(200)
         self._reload_timer.timeout.connect(self.reload)
-        self.text = ""
         self.reload()
-        self.set_mode(self.mode)
 
     def reload(self) -> None:
         """
@@ -108,28 +86,14 @@ class DocumentView(QWidget):
         text, problem = read_document(self.path)
         if self.path.exists() and str(self.path) not in self.watcher.files():
             self.watcher.addPath(str(self.path))
-        bars = [(view.verticalScrollBar(), view.verticalScrollBar().value()) for view in (self.rendered, self.raw)]
-        self.text = text
+        bar = self.view.verticalScrollBar()
+        value = bar.value()
         self.problem = problem
-        if problem:
-            self.rendered.setHtml(f"<p class=error>{problem}</p>")
-            self.raw.setPlainText(problem)
+        if self.markdown:
+            self.view.setHtml(f"<p class=error>{html.escape(problem)}</p>" if problem else md(text))
         else:
-            self.raw.setPlainText(text)
-            if self.markdown:
-                self.rendered.setHtml(md(text))
-        for bar, value in bars:
-            bar.setValue(value)
-
-    def set_mode(self, mode: str) -> None:
-        """
-        Shows the file rendered or as raw text; only Markdown is rendered.
-        """
-        self.mode = mode if self.markdown else RAW
-        rendered = self.mode == RENDERED or bool(self.problem)
-        self.stack.setCurrentWidget(self.rendered if rendered else self.raw)
-        for name, button in self.mode_buttons.items():
-            button.setStyleSheet(f"color: {theme.ACCENT if name == self.mode else theme.DIM};")
+            self.view.setPlainText(problem or text)
+        bar.setValue(value)
 
     def _link(self, url: QUrl) -> None:
         """
@@ -178,7 +142,7 @@ class DocumentTabs(QTabWidget):
         view = DocumentView(path, self.root, self.font_)
         view.open_file.connect(self.open_file)
         index = self.addTab(view, path.name)
-        self.tabBar().setTabToolTip(index, view.path_label.text())
+        self.tabBar().setTabToolTip(index, view.relative)
         close = QToolButton(objectName="flat")
         close.setText("×")
         close.setToolTip("Close")

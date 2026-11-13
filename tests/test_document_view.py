@@ -1,6 +1,6 @@
 """
-Tests of viewing files from the filemap: a click on a file opens it in a tab beside the feed, Markdown rendered with
-a switch to its raw text and code as raw text, a second click shows the open tab, binary and missing files say why
+Tests of viewing files from the filemap: a click on a file opens it in a tab beside the feed, Markdown rendered and
+code as raw text, a second click shows the open tab, binary and missing files say why
 they are not shown, a changed file is read again, and the conversation's tab cannot be closed.
 """
 import os
@@ -9,10 +9,10 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QTabBar  # noqa: E402
+from PySide6.QtWidgets import QApplication, QPlainTextEdit, QTabBar, QTextBrowser  # noqa: E402
 
 from local_fox import config  # noqa: E402
-from local_fox.ui.document_view import RAW, RENDERED, DocumentTabs, read_document  # noqa: E402
+from local_fox.ui.document_view import DocumentTabs, read_document  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def scratch_config(tmp_path, monkeypatch):
@@ -28,16 +28,14 @@ def tabs_with_feed(tmp_path):
     tabs.close_all(tmp_path.resolve())
     return tabs
 
-def test_markdown_opens_rendered_and_switches_to_raw(app, tmp_path):
+def test_markdown_opens_rendered(app, tmp_path):
     (tmp_path / "README.md").write_text("# Title\n\nSome *text*.\n", encoding="utf-8")
     tabs = tabs_with_feed(tmp_path)
     view = tabs.open_file(tmp_path / "README.md")
     assert tabs.count() == 2 and tabs.currentWidget() is view and tabs.tabText(1) == "README.md"
-    assert view.mode == RENDERED and view.stack.currentWidget() is view.rendered
-    assert "Title" in view.rendered.toPlainText() and "#" not in view.rendered.toPlainText()
-    view.mode_buttons[RAW].click()
-    assert view.stack.currentWidget() is view.raw and view.raw.toPlainText().startswith("# Title")
-    assert view.path_label.text() == "README.md"
+    assert isinstance(view.view, QTextBrowser)
+    assert "Title" in view.view.toPlainText() and "#" not in view.view.toPlainText()
+    assert tabs.tabBar().tabToolTip(1) == "README.md"
 
 def test_code_is_raw_and_a_second_click_shows_its_tab(app, tmp_path):
     (tmp_path / "src").mkdir()
@@ -45,8 +43,8 @@ def test_code_is_raw_and_a_second_click_shows_its_tab(app, tmp_path):
     (tmp_path / "notes.md").write_text("notes", encoding="utf-8")
     tabs = tabs_with_feed(tmp_path)
     code = tabs.open_file(tmp_path / "src" / "main.py")
-    assert code.mode == RAW and not code.mode_buttons and code.raw.toPlainText() == "def main():\n    return 1\n"
-    assert code.path_label.text() == "src/main.py"
+    assert isinstance(code.view, QPlainTextEdit) and code.view.toPlainText() == "def main():\n    return 1\n"
+    assert tabs.tabBar().tabToolTip(1) == "src/main.py"
     tabs.open_file(tmp_path / "notes.md")
     assert tabs.open_file(tmp_path / "src" / "main.py") is code and tabs.count() == 3 and tabs.currentIndex() == 1
 
@@ -74,7 +72,7 @@ def test_a_changed_file_is_read_again(app, tmp_path):
     view = tabs_with_feed(tmp_path).open_file(path)
     path.write_text("x = 2\n", encoding="utf-8")
     view.reload()  # What the file watcher calls
-    assert view.raw.toPlainText() == "x = 2\n"
+    assert view.view.toPlainText() == "x = 2\n"
 
 def test_a_link_to_a_project_file_opens_it(app, tmp_path):
     (tmp_path / "docs").mkdir()
