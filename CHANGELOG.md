@@ -4,6 +4,13 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.0.2 (2026-11-13)
+
+- **The model, context size and CPU threads are dropdowns alike** in the top bar; the context size is no longer a
+  dialog.
+- **The mouse wheel scrolls past dropdowns and number fields** instead of changing them, in the settings and
+  everywhere else; a value changes only by clicking, typing or the arrow keys.
+
 ## 1.0.1 (2026-11-13)
 
 - **CPU threads**: the threads Ollama runs the model with, chosen in the top bar ("threads auto / 16"), by
