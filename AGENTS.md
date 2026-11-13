@@ -282,8 +282,9 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 - The version is in one place, `__version__` in `local_fox/__init__.py`; `pyproject.toml` (dynamic), the
   executable's version resource and the macOS bundle (`packaging/local_fox.spec`) read it from there. The window,
   the start dialog, exports and the log show it.
-- Semantic versioning: a **minor** version (1.1.0) for a fully new feature, a **patch** (1.0.1) for fixes and
-  minor or invisible changes, a **major** one (2.0.0) only when something users or projects rely on breaks: a setting
+- Semantic versioning: a **minor** version (1.1.0) for a big, fully new feature (such as viewing files), a
+  **patch** (1.0.1) for fixes, small features (such as the CPU threads choice) and minor or invisible changes;
+  ask the user when unsure, a **major** one (2.0.0) only when something users or projects rely on breaks: a setting
   removed or renamed (unknown keys are an error on load), saved conversations or set-up projects no longer
   readable, a principle above given up.
 - Not every commit is a release. Bump the version when the user asks for a release, or suggest one after a

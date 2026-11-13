@@ -46,8 +46,8 @@ DESCRIPTIONS = {
     "num_ctx": "The context size in tokens, sent with every request. Ollama uses 4 096 tokens when none is sent. A larger "
                "context needs little memory with flint:40b, but moves more of the model from the GPU to the CPU.",
     "num_thread": "The CPU threads Ollama runs the model with; empty leaves it to Ollama, which often takes about half "
-                  "of the processors. Fewer threads make the model slower and the computer cooler and quieter; reading "
-                  "the prompt slows the most. Also set for a session in the top bar or by /threads.",
+                  "of the processors. Fewer threads use less of the CPU, so the computer stays cooler and quieter; the "
+                  "model may get slower, the more so the more of it runs on the CPU. Changing it reloads the model. Also set for a session in the top bar or by /threads.",
     "think": "Thinking: empty turns it on for models that can think, true or false forces it, and a level such as "
              "low or high is passed on to models that take one.",
     "temperature": "The model's temperature; empty uses the model's own.",

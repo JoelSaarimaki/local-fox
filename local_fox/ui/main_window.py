@@ -120,8 +120,8 @@ class MainWindow(QMainWindow):
         self.context_button = _button("", self._ask_context, "flat", "The context size: click to change it for this session")
         self.threads_button = QToolButton(objectName="flat")
         self.threads_button.setPopupMode(QToolButton.InstantPopup)
-        self.threads_button.setToolTip("The CPU threads Ollama runs the model with: fewer make the model slower and the "
-                                       "computer cooler and quieter. Click to change them for this session.")
+        self.threads_button.setToolTip("The CPU threads Ollama runs the model with: fewer use less of the CPU and keep the "
+                                       "computer cooler and quieter, but may make the model slower. Click to change them for this session.")
         self.threads_menu = QMenu(self)
         self.threads_menu.aboutToShow.connect(self._fill_threads_menu)
         self.threads_button.setMenu(self.threads_menu)
@@ -1164,8 +1164,8 @@ class MainWindow(QMainWindow):
                 return
             what = (f"Ollama runs the model with {threads} CPU threads for this session" if threads
                     else "Ollama chooses the CPU threads itself for this session")
-            session.notice(f"{what}, from the next request, which may reload the model and take a while. Fewer threads make "
-                           "the model slower and the computer cooler; reading the prompt slows the most.")
+            session.notice(f"{what}, from the next request, for which Ollama loads the model again (about 20 seconds for gemma4:26b). Fewer threads use "
+                           "less of the CPU and keep the computer cooler; the model may get slower, the more so the more of it runs on the CPU.")
         self.runner.call(set_threads)
 
     def _ask_context(self) -> None:

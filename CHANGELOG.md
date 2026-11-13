@@ -1,8 +1,14 @@
 # Changelog
 
-Local Fox follows [semantic versioning](https://semver.org/): a minor version for fully new features, a patch
-version for fixes and minor or invisible changes, and a major version only for changes that break what users or
+Local Fox follows [semantic versioning](https://semver.org/): a minor version for big new features, a patch
+version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
+
+## 1.0.1 (2026-11-13)
+
+- **CPU threads**: the threads Ollama runs the model with, chosen in the top bar ("threads auto / 16"), by
+  `/threads` or with the `num_thread` setting: Ollama's own choice, or 1 up to the computer's processors. Fewer
+  threads use less of the CPU, so the computer stays cooler and quieter, without limiting other programs.
 
 ## 1.0.0 (2026-11-13)
 
