@@ -4,6 +4,15 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.0.3 (2026-11-13)
+
+- **Text search results name each file once**, above its lines, instead of on every line: about a quarter less
+  output, so more matches fit. Old search results are still shortened when the context fills, and a file's
+  context lines now go with its matches.
+- **An edit without the file's hash is told so** ("missing_sha256", with the hash to use), instead of being told
+  that the file changed, which made qwen3.6:35b read the unchanged file again and repeat the edit.
+- The CPU threads menu says "auto", and its tooltip and the `/threads` texts are shorter.
+
 ## 1.0.2 (2026-11-13)
 
 - **The model, context size and CPU threads are dropdowns alike** in the top bar; the context size is no longer a
