@@ -272,7 +272,7 @@ that does not start with the new config shows its error in the feed.
 | `ollama_api_key` | empty | Your Ollama API key for the web tools (search and fetch through ollama.com; create one at ollama.com/settings/keys). Empty: the web tools are not offered (a key in the tools' own `~/.ollmcp-tools/user-config.json` is not used). Given only to the tools' server when it starts, never to the model, and not written to the log; hidden in the settings view |
 | `model` | `flint:40b` | Also set by the model menu |
 | `num_ctx` | `65536` | The context size sent with every request; with flint:40b a larger one needs little memory |
-| `num_thread` | `null` | The CPU threads Ollama runs the model with; `null`: Ollama's choice. Fewer run slower and cooler. Also set for a session in the top bar or by `/threads` |
+| `num_thread` | `null` | The CPU threads Ollama runs the model with; `null`: auto, Ollama's own choice. Fewer run slower and cooler. Also set for a session in the top bar or by `/threads` |
 | `think` | `null` | `null`: on for models that can think; `true`, `false` or a level such as `"high"` |
 | `temperature` | `null` | `null`: the model's own |
 | `seed` | `null` | A fixed seed, for repeatable runs |

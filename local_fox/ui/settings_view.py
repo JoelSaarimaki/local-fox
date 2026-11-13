@@ -28,7 +28,7 @@ KINDS = {"think": "think", "temperature": "float?", "seed": "int?", "max_steps":
 # The smallest and largest of the whole-number settings
 RANGES = {"font_size": (6, 40), "filemap_max_tokens": (1, 1_000_000)}
 THINK_CHOICES = ["", "true", "false", "low", "medium", "high"]
-OLLAMAS_CHOICE = "Ollama's choice"
+AUTO_THREADS = "auto"  # Ollama chooses the CPU threads itself, as the top bar's "threads auto"
 
 def kind_of(key: str) -> str:
     """
@@ -99,7 +99,7 @@ class AppSettingsForm(QWidget):
             # Ollama's choice, or a number up to this computer's processors (or the value, set for another computer)
             field = QComboBox()
             field.setMinimumWidth(160)
-            field.addItem(OLLAMAS_CHOICE, None)
+            field.addItem(AUTO_THREADS, None)
             count = processors()
             for threads in range(1, max(count, value or 0) + 1):
                 field.addItem(f"{threads} (all)" if threads == count else str(threads), threads)

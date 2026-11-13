@@ -30,7 +30,7 @@ from .filemap_view import FilemapView
 from .ollama_panel import OllamaPanel
 from .project_dialog import choose_project
 from .prompt import PromptInput
-from .settings_view import OLLAMAS_CHOICE, SettingsDialog, context_sizes
+from .settings_view import AUTO_THREADS, SettingsDialog, context_sizes
 
 HELP = f"""Commands:
 /clear            start a new session, with the instructions and the filemap again
@@ -114,8 +114,7 @@ class MainWindow(QMainWindow):
         # The model, the context size and the CPU threads: dropdowns alike, each filled when it opens
         self.model_button, self.model_menu = self._dropdown("The model", self._fill_model_menu)
         self.context_button, self.context_menu = self._dropdown("The context size for this session", self._fill_context_menu)
-        self.threads_button, self.threads_menu = self._dropdown("CPU threads for Ollama: fewer run cooler, maybe slower",
-                                                                self._fill_threads_menu)
+        self.threads_button, self.threads_menu = self._dropdown("CPU threads for Ollama", self._fill_threads_menu)
         self.usage_label = QLabel("", objectName="dim")
         self.usage_label.setToolTip("How much of the context the conversation uses")
         self.project_label = QLabel("", objectName="dim")
@@ -1092,7 +1091,7 @@ class MainWindow(QMainWindow):
 
     def _fill_threads_menu(self) -> None:
         """
-        Fills the CPU threads menu: Ollama's choice, and every number up to this computer's processors, which
+        Fills the CPU threads menu: auto (Ollama's choice), and every number up to this computer's processors, which
         are the most Ollama can use. For Ollama on another computer, its processors are unknown here.
         """
         menu = self.threads_menu
@@ -1106,7 +1105,7 @@ class MainWindow(QMainWindow):
         heading = (f"CPU threads for this session (this computer has {count} processors)" if local
                    else "CPU threads for this session (Ollama runs on another computer: /threads <n> sets any number)")
         menu.addAction(heading).setEnabled(False)
-        choice = menu.addAction(f"{OLLAMAS_CHOICE} (often about half)", lambda: self._set_threads(None))
+        choice = menu.addAction(AUTO_THREADS, lambda: self._set_threads(None))
         choice.setCheckable(True)
         choice.setChecked(current is None)
         if local:
