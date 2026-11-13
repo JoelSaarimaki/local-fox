@@ -15,9 +15,18 @@ The tools are **bundled, not copied**: the `ollmcp_tools` package is installed i
 repository and packed into the executable. The tools stay developed in their own repository, which other MCP
 clients and its `local_ai_tests` use too; don't copy their code into this one. Changes to the tools belong there.
 
-## The default model: flint:40b
+## The default model: qwen3.6:35b
 
-`flint:40b` is the default model (`DEFAULTS["model"]` in `local_fox/config.py`) and the preferred one.
+`qwen3.6:35b` is the default model (`DEFAULTS["model"]` in `local_fox/config.py`) and the preferred one, since
+2026-11-14. In the comparison scenarios through Local Fox (`tools/compare.py`, seeds 1 and 2, 2026-11-13) it acted in
+the right mode in 14 of 14 runs, read the needed files first in 14 of 14, passed every hidden test, made 4 tool errors
+against flint's 25, and took 44 seconds a run against flint's 103 (results in ollmcp-generic-tools'
+local_ai_test_results.md). It is a mixture-of-experts model with about 3B of its 35B parameters active per token,
+so it is fast even mostly on the CPU. It checks the existing plans and reviews its diff less often than flint, and
+it left the file hash out of edits before the tools stopped needing one (1.1.0). Avoid temperature 0 with it: Qwen3.6
+has been reported to loop there.
+
+`flint:40b` was the default before it; what follows is why Local Fox tolerates its calls by bare tool names.
 
 - ollmcp-generic-tools recommends `gemma4:26b` only because of ollmcp: flint calls tools by their bare names
   (`read_file_with_metadata` instead of `dev_read_file_with_metadata`), and ollmcp skips such calls without a
@@ -26,7 +35,7 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
   `Servers.resolve()` in `local_fox/mcp_servers.py` also runs prefixed names (`dev_x`, `dev.x`, `dev__x`) and a bare
   name that only one server has. Any name it cannot resolve gets "Unknown tool x. The tools are: …" as a tool response.
 - Checked on 2026-11-03: flint:40b fixed a bug through the core with 18 tool calls, all by bare names, all resolved.
-- Keep this tolerance when changing tool naming; it is what makes flint usable. Don't change the default back to
+- Keep this tolerance when changing tool naming; it is what makes flint usable. Don't change the default to
   gemma4 because of the ollmcp-generic-tools README: that recommendation is about ollmcp, not Local Fox.
 - Other installed models used in tests: `gemma4:26b`, `qwen3-coder:30b`, `gpt-oss:120b`, `llama3.1` (small and quick for smoke tests).
 

@@ -128,7 +128,7 @@ def app(tmp_path, monkeypatch):
     return QApplication.instance() or QApplication([])
 
 def fake_session(host="http://127.0.0.1:11434", phase=None):
-    return SimpleNamespace(config={"ollama_host": host}, model="flint:40b", phase=phase, running=False,
+    return SimpleNamespace(config={"ollama_host": host}, model=config.DEFAULTS["model"], phase=phase, running=False,
                            used_tokens=0, num_ctx=65536, changed_files=set(),
                            log=SimpleNamespace(write=lambda *a, **k: None))
 

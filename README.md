@@ -1,6 +1,6 @@
 # Local Fox
 
-A harness for local AI models run with Ollama (`flint:40b` by default, or e.g. `gemma4:26b`) and the MCP tools of
+A harness for local AI models run with Ollama (`qwen3.6:35b` by default, or e.g. `flint:40b`) and the MCP tools of
 [ollmcp-generic-tools](https://github.com/JoelSaarimaki/ollmcp-generic-tools). It replaces ollmcp; what it does
 differently is in "How a session goes to the model" below. What each version changed is in [CHANGELOG.md](CHANGELOG.md).
 
@@ -14,11 +14,11 @@ on Windows; for macOS and Linux, see [On macOS and Linux](#on-macos-and-linux).
 
 1.  **Install Ollama and the model.**
     Download and install Ollama from [ollama.com](https://ollama.com/). It keeps running in the background, and
-    Local Fox finds it at `http://127.0.0.1:11434`. Then download the default model, flint:40b (about 22 GB):
+    Local Fox finds it at `http://127.0.0.1:11434`. Then download the default model, qwen3.6:35b (about 23 GB):
     ```powershell
-    ollama pull flint:40b
+    ollama pull qwen3.6:35b
     ```
-    Other models, such as `gemma4:26b`, can be chosen later in the model menu; pull them the same way.
+    Other models, such as `flint:40b` or `gemma4:26b`, can be chosen later in the model menu; pull them the same way.
 
 2.  **Install Python** 3.11 or newer (Local Fox is developed with 3.14) from [python.org](https://www.python.org/downloads/).
     On Windows, tick "Add python.exe to PATH" in the installer. Check it in a new terminal with `python --version`.
@@ -270,7 +270,7 @@ that does not start with the new config shows its error in the feed.
 |---|---|---|
 | `ollama_host` | `http://127.0.0.1:11434` | Where Ollama runs; another computer's address for Ollama there (see [Ollama on another computer](#ollama-on-another-computer)). Applies at once; also set by `/host` |
 | `ollama_api_key` | empty | Your Ollama API key for the web tools (search and fetch through ollama.com; create one at ollama.com/settings/keys). Empty: the web tools are not offered (a key in the tools' own `~/.ollmcp-tools/user-config.json` is not used). Given only to the tools' server when it starts, never to the model, and not written to the log; hidden in the settings view |
-| `model` | `flint:40b` | Also set by the model menu |
+| `model` | `qwen3.6:35b` | Also set by the model menu |
 | `num_ctx` | `65536` | The context size sent with every request; with flint:40b a larger one needs little memory |
 | `num_thread` | `null` | The CPU threads Ollama runs the model with; `null`: auto, Ollama's own choice. Fewer run slower and cooler. Also set for a session in the top bar or by `/threads` |
 | `think` | `null` | `null`: on for models that can think; `true`, `false` or a level such as `"high"` |

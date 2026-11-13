@@ -15,8 +15,8 @@ from pathlib import Path
 DEFAULTS = {
     "ollama_host": "http://127.0.0.1:11434",
     "ollama_api_key": "",
-    # flint:40b is preferred: its calls by bare tool names, which ollmcp skips, run in Local Fox (see AGENTS.md)
-    "model": "flint:40b",
+    # qwen3.6:35b is preferred: as good as flint:40b in the comparison scenarios at twice its speed (see AGENTS.md)
+    "model": "qwen3.6:35b",
     "num_ctx": 65536,
     "num_thread": None,
     "think": None,
