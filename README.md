@@ -2,7 +2,7 @@
 
 A harness for local AI models run with Ollama (`flint:40b` by default, or e.g. `gemma4:26b`) and the MCP tools of
 [ollmcp-generic-tools](https://github.com/JoelSaarimaki/ollmcp-generic-tools). It replaces ollmcp; what it does
-differently is in "How a session goes to the model" below.
+differently is in "How a session goes to the model" below. What each version changed is in [CHANGELOG.md](CHANGELOG.md).
 
 ![The Local Fox window: the project's files on the left, and on the right the conversation with flint:40b fixing a bug, with its tool calls, thinking and answer](docs/window.png)
 

@@ -277,6 +277,19 @@ clients and its `local_ai_tests` use too; don't copy their code into this one. C
 - The project is a git repository (`main`). Commit when asked; build output (`build/`, `dist/`), `.venv` and `runs/` are
   ignored, and `packaging/local_fox.spec` is kept although the `.gitignore` template ignores `*.spec`.
 
+## Versions
+
+- The version is in one place, `__version__` in `local_fox/__init__.py`; `pyproject.toml` (dynamic), the
+  executable's version resource and the macOS bundle (`packaging/local_fox.spec`) read it from there. The window,
+  the start dialog, exports and the log show it.
+- Semantic versioning: a **patch** (1.0.1) for fixes, a **minor** version (1.1.0) for new features or visible
+  changes of behaviour, a **major** one (2.0.0) when something users or projects rely on breaks: a setting
+  removed or renamed (unknown keys are an error on load), saved conversations or set-up projects no longer
+  readable, a principle above given up.
+- Not every commit is a release. Bump the version when the user asks for a release, or suggest one after a
+  feature lands; record it in `CHANGELOG.md` (a heading `## x.y.z (date)` with what changed for users; a test
+  checks the current version has one), commit, and tag the commit `vx.y.z`. The user pushes, tags included.
+
 ## Not built yet
 
 An automatic context size.
