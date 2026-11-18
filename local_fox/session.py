@@ -130,7 +130,7 @@ class Session:
         self.model: str = config["model"]
         self.num_ctx: int = config["num_ctx"]
         self.num_thread: int | None = config["num_thread"]  # None: Ollama's own choice
-        self.client = ollama.AsyncClient(host=config["ollama_host"])
+        self.client = ollama_server.client(config["ollama_host"])
         self.servers: Servers | None = None
         self.rules: Rules | None = None
         self.entries: list[Entry] = []
@@ -586,7 +586,7 @@ class Session:
         other computer may have another version of it, or none), so it is read again; so are the models' file sizes.
         """
         self.config["ollama_host"] = host
-        self.client = ollama.AsyncClient(host=host)
+        self.client = ollama_server.client(host)
         self.capabilities, self.max_context = None, None
         self.connection_failed = False  # The old server's failure says nothing of the new one
         ollama_server.forget_file_sizes()

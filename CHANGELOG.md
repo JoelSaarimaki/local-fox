@@ -4,6 +4,14 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.3 (2026-11-18)
+
+- **A connection to Ollama that died is noticed.** Local Fox waits for a reply with no time limit, as a model that
+  loads or reads a long prompt sends nothing for minutes, so a computer that slept while Ollama on another computer
+  replied could wake to "Thinking…" for good. The connections now use TCP keepalive, which the other computer's
+  system answers also while Ollama is busy: a dead connection fails within about a minute and a half, and the
+  feed shows Ollama's connection error. Nothing is sent again on its own.
+
 ## 1.1.2 (2026-11-18)
 
 - **Switching to Ollama on another computer** works through the settings as through `/host`: the settings view's

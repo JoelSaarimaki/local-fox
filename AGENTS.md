@@ -69,6 +69,9 @@ has been reported to loop there.
   "Stop Ollama server" stops any Ollama server of this computer at the address (the user may want a visible one
   in a console instead of a hidden one): found by its port (`ollama_server.other_server`), only if the program
   is Ollama, and after the user confirms it when Local Fox did not start it.
+- **Ollama's clients are made by `ollama_server.client`**, with TCP keepalive: replies are read with no time
+  limit (a model loading or reading a long prompt sends nothing for minutes), and without keepalive a connection
+  that died while the computer slept left the turn at "Thinking…" for good. Don't make `ollama.AsyncClient`s elsewhere.
 - **Every tool call gets a response**, including unknown names, broken JSON, missing arguments, skipped and stopped calls.
 - **Settings in one place**: `config.json` (`local_fox/config.py`). A new setting needs a default in `DEFAULTS`,
   a help text in `DESCRIPTIONS` (the settings view shows it; a test checks every setting has one), a check in

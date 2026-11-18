@@ -19,6 +19,7 @@ and the panel says that the share is unknown.
 """
 import asyncio
 import os
+import socket
 import re
 import shlex
 import shutil
@@ -30,11 +31,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import httpx
 import ollama
 
 DEFAULT_PORT = 11434
 LOG_NAME = "ollama-serve.log"
 POLL_TIMEOUT = 5  # Seconds for 'ollama ps', which answers at once also while a model loads
+# TCP keepalive on the connections to Ollama: the first probe after this many idle seconds, then one every
+# KEEPALIVE_INTERVAL, and the connection fails after KEEPALIVE_PROBES unanswered ones (about 90 seconds in all)
+KEEPALIVE_IDLE = 30
+KEEPALIVE_INTERVAL = 10
+KEEPALIVE_PROBES = 6
 
 # The phases of Local Fox's request (Session.phase)
 WAITING = "waiting"      # Sent, no reply chunk yet: loading the model or reading the prompt
@@ -123,6 +130,33 @@ async def _read_file_sizes(client, timeout: float) -> None:
         return
     _file_sizes.update({m.model: m.size or 0 for m in models if getattr(m, "model", None)})
 
+def keepalive_options() -> list[tuple[int, int, int]]:
+    """
+    Returns the socket options that turn on TCP keepalive, with the timings this platform lets a program set.
+
+    A reply is read with no time limit, as a model that loads or reads a long prompt sends nothing for minutes.
+    But a connection can die without a word: a computer that slept while Ollama on another computer replied wakes
+    to a connection that the other end gave up long ago, and the reply would be waited for at "Thinking…" for good.
+    Keepalive probes are answered by the other computer's system, not by Ollama, so a busy server still answers
+    them, and a dead connection fails within about a minute and a half, which the feed shows as Ollama's
+    connection error. Nothing is sent again: the user decides what next.
+    """
+    options = [(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)]
+    # TCP_KEEPIDLE on Windows and Linux; macOS calls the idle time TCP_KEEPALIVE
+    idle = getattr(socket, "TCP_KEEPIDLE", None) or (getattr(socket, "TCP_KEEPALIVE", None) if sys.platform == "darwin" else None)
+    for name, value in ((idle, KEEPALIVE_IDLE), (getattr(socket, "TCP_KEEPINTVL", None), KEEPALIVE_INTERVAL),
+                        (getattr(socket, "TCP_KEEPCNT", None), KEEPALIVE_PROBES)):
+        if name is not None:
+            options.append((socket.IPPROTO_TCP, name, value))
+    return options
+
+def client(host: str) -> ollama.AsyncClient:
+    """
+    Returns an Ollama client for host whose connections use TCP keepalive (keepalive_options). Every client of
+    Local Fox is made here, so that none of them can wait for good on a connection that died.
+    """
+    return ollama.AsyncClient(host=host, transport=httpx.AsyncHTTPTransport(socket_options=keepalive_options()))
+
 def forget_file_sizes() -> None:
     """
     Forgets the models' file sizes, when Local Fox talks to Ollama at another address: another computer's model of
@@ -142,7 +176,7 @@ async def models_at(host: str, timeout: float = POLL_TIMEOUT) -> list[str]:
     Returns the models installed at an address that the session does not talk to yet, e.g. one typed in the
     settings view, so that the user chooses from the models of the server they switch to. Raises as installed_models.
     """
-    return await installed_models(ollama.AsyncClient(host=host), timeout)
+    return await installed_models(client(host), timeout)
 
 def activity(state: State | None, model: str, phase: str | None) -> str:
     """

@@ -862,7 +862,7 @@ def test_another_ollama_address_keeps_the_conversation_and_checks_the_model_ther
     asked = []
 
     class Remote:
-        def __init__(self, host):
+        def __init__(self, host, **options):
             self.host = host
 
         async def show(self, model):
@@ -890,7 +890,7 @@ def test_another_ollama_address_forgets_the_old_servers_model_and_names_the_mode
     session.capabilities, session.max_context, session.connection_failed = ["tools"], 262144, True
 
     class Remote:
-        def __init__(self, host):
+        def __init__(self, host, **options):
             self.host = host
 
         async def show(self, model):

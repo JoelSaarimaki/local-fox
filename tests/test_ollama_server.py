@@ -520,3 +520,39 @@ def test_a_server_started_here_is_not_the_other_computers(app):
         window._serve = None
         window.session = None
         window.close()
+
+def test_connections_to_ollama_use_tcp_keepalive():
+    # A computer that slept while another computer's Ollama replied must not wait for that reply for good
+    import socket
+    options = ollama_server.keepalive_options()
+    assert (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1) in options
+    if hasattr(socket, "TCP_KEEPIDLE"):
+        assert (socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, ollama_server.KEEPALIVE_IDLE) in options
+    client = ollama_server.client("http://192.168.1.20:11434")
+    pool = client._client._transport._pool
+    assert pool._socket_options == options and str(client._client.base_url).startswith("http://192.168.1.20:11434")
+
+def test_a_keepalive_socket_connects(tmp_path):
+    # The options are accepted by this platform's sockets: a real request to a local server goes through
+    import asyncio
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Tags(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b'{"models": [{"model": "llama3.1:latest", "name": "llama3.1:latest"}]}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+    server = HTTPServer(("127.0.0.1", 0), Tags)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        host = f"http://127.0.0.1:{server.server_address[1]}"
+        assert asyncio.run(ollama_server.models_at(host)) == ["llama3.1:latest"]
+    finally:
+        server.shutdown()
