@@ -13,10 +13,11 @@ OLLAMA_LOG = r"%LOCALAPPDATA%\Ollama\server.log (Windows) or ~/.ollama/logs/serv
 _MEMORY = ("out of memory", "requires more system memory", "insufficient memory", "not enough memory", "failed to allocate",
            "unable to allocate", "cudamalloc", "alloc_buffer", "memory allocation", "oom")
 
-def explain(message: str, model: str, num_ctx: int) -> str:
+def explain(message: str, model: str, num_ctx: int, installed: list[str] | None = None) -> str:
     """
     Returns an explanation of an error message of Ollama, with Ollama's message at its end, or the message as it is
-    if it is not one Local Fox knows.
+    if it is not one Local Fox knows. installed, if known, are the models the server has, named when it does not
+    have the model: after a switch to Ollama on another computer, its models are often not the ones of this one.
     """
     text = message.lower()
     context = f"{num_ctx:,}".replace(",", " ")
@@ -31,6 +32,8 @@ def explain(message: str, model: str, num_ctx: int) -> str:
                        "settings (/settings).")
     elif "not found" in text and ("model" in text or "pull" in text):
         explanation = f"Ollama does not have {model}. Install it with 'ollama pull {model}', or choose another model in the top bar."
+        if installed is not None:
+            explanation += (f" The models it has: {', '.join(installed)}." if installed else " It has no models installed.")
     elif "timed out waiting for llama runner" in text or "timed out waiting for" in text:
         explanation = (f"{model} took too long to load. A large model can take minutes the first time, and longer if part "
                        "of it does not fit in the GPU. Ask again; if it keeps happening, try a smaller context or model.")

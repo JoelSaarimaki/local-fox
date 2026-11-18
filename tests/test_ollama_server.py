@@ -456,3 +456,67 @@ def test_a_check_of_the_old_address_does_not_overwrite_the_new_ones(app):
     finally:
         window.session = None
         window.close()
+
+def test_saving_another_address_and_model_switches_the_model_at_the_new_address(app, monkeypatch):
+    import time as clock
+
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow(dict(config.DEFAULTS))
+    order = []
+    monkeypatch.setattr(window, "_local_notice", lambda text: None)
+    monkeypatch.setattr(window, "_local_error", lambda text: None)
+    monkeypatch.setattr(window, "_poll_ollama", lambda then=None: None)
+    monkeypatch.setattr(window, "_switch_model", lambda name: order.append(("model", name, session.config["ollama_host"])))
+    try:
+        session = fake_session()
+
+        async def set_host(host):
+            await asyncio.sleep(0.05)  # The model must not be switched at the old address meanwhile
+            session.config["ollama_host"] = host
+            return "Ollama does not have qwen3.6:35b."
+        session.set_host = set_host
+        window.session = session
+        window._settings_saved({**window.settings, "ollama_host": "http://192.168.1.40:11434", "model": "llama3.1"}, False, False)
+        end = clock.monotonic() + 5
+        while not order and clock.monotonic() < end:
+            app.processEvents()
+            clock.sleep(0.01)
+        assert order == [("model", "llama3.1", "http://192.168.1.40:11434")]
+    finally:
+        window.session = None
+        window.close()
+
+def test_host_default_goes_back_to_this_computer(app, monkeypatch):
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow({**config.DEFAULTS, "ollama_host": "http://192.168.1.20:11434"})
+    hosts = []
+    monkeypatch.setattr(window, "_set_host", lambda text, then=None: hosts.append(text))
+    try:
+        window.session = fake_session("http://192.168.1.20:11434")
+        window._submit("/host default")
+        assert hosts == [config.DEFAULTS["ollama_host"]]
+    finally:
+        window.session = None
+        window.close()
+
+def test_a_server_started_here_is_not_the_other_computers(app):
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow(dict(config.DEFAULTS))
+
+    class Process:
+        pid, returncode = 1234, None
+
+        def poll(self):
+            return self.returncode
+    try:
+        window._serve, window._serve_host = Process(), "http://127.0.0.1:11434"
+        assert window._own_server("http://127.0.0.1:11434") and window._own_server("http://localhost:11434")
+        assert not window._own_server("http://192.168.1.20:11434") and not window._own_server("http://127.0.0.1:11500")
+        window.session = fake_session("http://192.168.1.20:11434")
+        window._ollama_state = State(True)
+        window._show_ollama()
+        assert window.ollama_panel.stop_button.isHidden()  # Nothing of this computer to stop for that server
+    finally:
+        window._serve = None
+        window.session = None
+        window.close()

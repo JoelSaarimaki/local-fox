@@ -106,7 +106,9 @@ project stay on yours: only the requests to the model go there, and the tools st
 2.  **In Local Fox**, type `/host` with the other computer's address, e.g. `/host 192.168.1.20` (the port 11434 is
     added), or set `ollama_host` in the settings. It applies at once, and the conversation stays. The Ollama panel
     shows the other computer's server; it has no start or stop button, as those work only for a server on your
-    computer.
+    computer. The model menu lists the other computer's models, and so does the settings view's model field as soon
+    as the address is typed there: if that Ollama does not have the model, the feed says so and names the models it has.
+3.  **Back to your own computer**: `/host default`, or the **Default** button beside `ollama_host` in the settings.
 
 Ollama has no passwords: anyone who can reach that port can use the server. Open it only on a network you trust.
 
@@ -260,7 +262,8 @@ a clear reads it again.
 
 **The settings view** (`/settings`, or **Settings** in the ≡ menu) shows the same file as a form, with what each
 setting does. **Save** writes it: the model, context size, CPU threads and Ollama address apply at once, the font size from the next start, the others from the next clear.
-**Save and clear** applies them all at once. Its **Project tools** tab shows the open project's tools config
+**Save and clear** applies them all at once. A **Default** button beside each setting sets it back to its
+default, and **Restore defaults** sets them all but the API key; nothing is written until you save. Its **Project tools** tab shows the open project's tools config
 (`.local-fox/tools-config.json`) the same way; settings it does not know are kept, and a saved change asks
 to restart the tools (Save and clear restarts them). The tools' own rules are checked by the tools: a server
 that does not start with the new config shows its error in the feed.
@@ -269,7 +272,7 @@ that does not start with the new config shows its error in the feed.
 
 | Setting | Default | |
 |---|---|---|
-| `ollama_host` | `http://127.0.0.1:11434` | Where Ollama runs; another computer's address for Ollama there (see [Ollama on another computer](#ollama-on-another-computer)). Applies at once; also set by `/host` |
+| `ollama_host` | `http://127.0.0.1:11434` | Where Ollama runs; another computer's address for Ollama there (see [Ollama on another computer](#ollama-on-another-computer)). Applies at once; also set by `/host` (`/host default` for this computer's) |
 | `ollama_api_key` | empty | Your Ollama API key for the web tools (search and fetch through ollama.com; create one at ollama.com/settings/keys). Empty: the web tools are not offered (a key in the tools' own `~/.ollmcp-tools/user-config.json` is not used). Given only to the tools' server when it starts, never to the model, and not written to the log; hidden in the settings view |
 | `model` | `qwen3.6:35b` | Also set by the model menu |
 | `num_ctx` | `65536` | The context size sent with every request; a larger one needs more memory and can move more of the model to the CPU |

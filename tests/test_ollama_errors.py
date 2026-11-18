@@ -59,3 +59,9 @@ def test_a_session_started_without_ollama_does_not_ask_to_send_again(tmp_path):
     session.client = Down()
     error = asyncio.run(session.load_model_info())
     assert "not running" in error and "send your message again" not in error
+
+def test_a_missing_model_is_explained_with_the_models_the_server_has():
+    text = explain('model "flint:40b" not found, try pulling it first', "flint:40b", 65536, ["gemma4:26b", "llama3.1:latest"])
+    assert "The models it has: gemma4:26b, llama3.1:latest." in text
+    assert "has no models installed" in explain('model "flint:40b" not found', "flint:40b", 65536, [])
+    assert "The models it has" not in explain('model "flint:40b" not found', "flint:40b", 65536)

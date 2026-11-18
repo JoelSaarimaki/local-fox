@@ -39,7 +39,7 @@ HELP = f"""Commands:
 /model [name]     show the installed models, or switch to one
 /context [size]   show the context size and how much the conversation uses, or set the size for this session
 /threads [n|auto] show the CPU threads Ollama uses, or set them for this session
-/host [address]   show the Ollama address, or set it, e.g. /host 192.168.1.20 for Ollama on another computer
+/host [address]   show the Ollama address, or set it, e.g. /host 192.168.1.20 for another computer, /host default for this one
 /settings         show the settings of config.json
 /config           open the folder of config.json; a clear reads it again
 /log              open the folder of the log of this run
@@ -93,6 +93,7 @@ class MainWindow(QMainWindow):
         self._ollama_state: ollama_server.State | None = None  # The latest poll of the Ollama server
         self._serve = None               # The 'ollama serve' Local Fox started on the user's click, stopped at the close
         self._serve_started = 0.0        # When it was started, while it has not answered yet (0 when it has)
+        self._serve_host = ""            # The address it serves
         self.setWindowTitle(APP_NAME)
         self.resize(1400, 900)
 
@@ -448,7 +449,7 @@ class MainWindow(QMainWindow):
         text = ollama_server.activity(state, model, s.phase if s else None)
         down = state is not None and not state.reachable and not (s and s.phase)
         tip = ""
-        own = self._serve is not None and self._serve.poll() is None
+        own = self._own_server(host)
         if own:
             tip = "Started by Local Fox ('ollama serve'), stopped when Local Fox closes. " + (
                 "Its output is in its window." if getattr(self._serve, "visible", False) else
@@ -499,14 +500,14 @@ class MainWindow(QMainWindow):
         console of their own: the one Local Fox started at once, any other (the Ollama app's, a console's, or one
         running hidden) after the user confirmed it. A request in progress then fails, and the feed says so.
         """
-        serve, self._serve, self._serve_started = self._serve, None, 0.0
+        host = self.session.config["ollama_host"] if self.session else self.settings["ollama_host"]
         log = self.session.log if self.session else None
-        if serve and serve.poll() is None:
+        if self._own_server(host):
+            serve, self._serve, self._serve_started = self._serve, None, 0.0
             ollama_server.stop(serve)
             if log:
                 self.runner.call(lambda: log.write("ollama_serve_stopped", pid=serve.pid))
         else:
-            host = self.session.config["ollama_host"] if self.session else self.settings["ollama_host"]
             other = ollama_server.other_server(host)
             if not other:
                 # Most often it was stopped elsewhere since the last check: the panel is checked again and then
@@ -538,6 +539,15 @@ class MainWindow(QMainWindow):
         self._show_ollama()
         self._poll_ollama()
 
+    def _own_server(self, host: str) -> bool:
+        """
+        Checks if the 'ollama serve' Local Fox started runs and serves host: after a switch to another computer's
+        Ollama, the one started here is not the panel's server, so it is neither shown nor stopped as its own.
+        """
+        serve = self._serve
+        return (serve is not None and serve.poll() is None and ollama_server.is_local(host)
+                and ollama_server.port_of(host) == ollama_server.port_of(self._serve_host))
+
     def _start_ollama(self) -> None:
         """
         Starts 'ollama serve' for the address of the settings, on the user's click on "Start Ollama server".
@@ -551,6 +561,7 @@ class MainWindow(QMainWindow):
         logs = config_module.data_dir() / "logs"
         try:
             self._serve = ollama_server.start(program, host, logs)
+            self._serve_host = host
         except OSError as error:
             self._local_error(f"'ollama serve' did not start: {error}")
             return
@@ -768,6 +779,10 @@ class MainWindow(QMainWindow):
             settings = {**settings, "model": session.model, "num_ctx": session.num_ctx}
         self.settings = dict(settings)
         self.filemap.full_paths = self.settings.get("prompt_full_paths", False)
+        host = self.settings["ollama_host"]
+        moved = host != session.config["ollama_host"]
+        if moved:
+            self._host_changed()
 
         async def clear():
             await session.stop_and_wait()
@@ -776,6 +791,11 @@ class MainWindow(QMainWindow):
                 await session.restart_servers()
             else:
                 await session.new_conversation()
+            if moved:
+                # After the start entries, with the model's check at the new address (an error above it, if any)
+                session.notice(f"The Ollama address is now {host}" + (
+                    "." if ollama_server.is_local(host) else ", another computer: the model runs there, and the "
+                    "panel shows that server. Its models are in the model menu."))
         self._hide_notice()
         self._run(clear(), lambda _: self._poll_ollama())  # The settings may have another Ollama address
 
@@ -806,22 +826,32 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self) -> None:
         """
-        Opens the settings view, with the installed models in the model field when Ollama answers in time.
+        Opens the settings view. Its model field lists the models installed at the address in its ollama_host
+        field, which it asks for when it opens and when the address is edited (e.g. to Ollama on another computer).
         """
         session = self.session
-        models = []
-        if session:
-            try:
-                models = self.runner.submit(session.list_models()).result(timeout=2)
-            except Exception:
-                pass  # The model is typed instead
         tools = [t.exposed for t in session.servers.tools] if session and session.servers else []
         # The session's model's largest context, for the context sizes offered if config.json names the same model
         known = {session.model: session.max_context} if session and session.max_context else {}
-        dialog = SettingsDialog(self, models, tools, self._project(), known)
+        dialog = SettingsDialog(self, None, tools, self._project(), known)
         dialog.open_folder.connect(self._open_config)
         dialog.saved.connect(self._settings_saved)
+        dialog.models_wanted.connect(lambda host: self._list_models_for(dialog, host))
         dialog.exec()
+
+    def _list_models_for(self, dialog: SettingsDialog, host: str) -> None:
+        """
+        Lists the models installed at host in the session's loop, and shows them in the settings view if it is
+        still open. Nothing is sent to a model: 'ollama list' only reads the server's list.
+        """
+        future = self.runner.submit(ollama_server.models_at(host))
+
+        def finished(f):
+            error = f.exception()
+            models = None if error else f.result()
+            text = "" if not error else "it did not answer in time" if isinstance(error, TimeoutError) else str(error) or type(error).__name__
+            self._later(lambda: dialog.isVisible() and dialog.show_models(host, models, text))
+        future.add_done_callback(finished)
 
     def _settings_saved(self, settings: dict, clear: bool, tools_changed: bool) -> None:
         self.filemap.full_paths = settings.get("prompt_full_paths", False)
@@ -839,14 +869,17 @@ class MainWindow(QMainWindow):
             self.runner.call(lambda: session.notice("The Ollama API key was saved. The tools take it when they restart, "
                                                     "which starts a new conversation.", [RESTART_TOOLS]))
         previous, self.settings = self.settings, dict(settings)
-        if self.session and settings["model"] != self.session.model:
-            self._switch_model(settings["model"])  # As the model menu does, so that a clear keeps it
-        if self.session and settings["num_ctx"] != previous.get("num_ctx"):
+        session = self.session
+        if session and settings["num_ctx"] != previous.get("num_ctx"):
             self._set_context(settings["num_ctx"])
-        if self.session and settings["num_thread"] != previous.get("num_thread"):
+        if session and settings["num_thread"] != previous.get("num_thread"):
             self._set_threads(settings["num_thread"])
-        if self.session and settings["ollama_host"] != self.session.config["ollama_host"]:
-            self._set_host(settings["ollama_host"])  # At once, as the conversation does not depend on the server
+        # As the model menu does, so that a clear keeps it; after a change of address, at the new address
+        switch = (lambda: self._switch_model(settings["model"])) if session and settings["model"] != session.model else None
+        if session and settings["ollama_host"] != session.config["ollama_host"]:
+            self._set_host(settings["ollama_host"], then=switch)  # At once, as the conversation does not depend on the server
+        elif switch:
+            switch()
         self._local_notice("The settings were saved to config.json. The model, context size, CPU threads and Ollama address apply now, the "
                            "others from the next clear (/clear), and the font size from the next start.")
 
@@ -986,13 +1019,27 @@ class MainWindow(QMainWindow):
         loading = self.model_menu.addAction("Loading the models…")
         loading.setEnabled(False)
 
-        def fill(models):
+        session = self.session
+        host = session.config["ollama_host"]
+
+        async def models():
+            try:
+                return await session.list_models()
+            except Exception:
+                return None  # Said in the menu, not as an error in the feed
+
+        def fill(names):
             self.model_menu.clear()
-            for name in models:
+            if names is None:
+                self.model_menu.addAction(f"Ollama at {host} does not answer").setEnabled(False)
+                return
+            if not names:
+                self.model_menu.addAction(f"No models at {host}").setEnabled(False)
+            for name in names:
                 action = self.model_menu.addAction(name, lambda n=name: self._switch_model(n))
                 action.setCheckable(True)
-                action.setChecked(name == self.session.model)
-        self._run(self.session.list_models(), fill)
+                action.setChecked(name == session.model)
+        self._run(models(), fill)
 
     def _switch_model(self, name: str) -> None:
         if not self.session:
@@ -1026,17 +1073,20 @@ class MainWindow(QMainWindow):
         """
         if not self.session:
             return
-        if argument:
+        if argument.lower() == "default":
+            self._set_host(config_module.DEFAULTS["ollama_host"])
+        elif argument:
             self._set_host(argument)
         else:
             self._local_notice(f"The Ollama address is {self.session.config['ollama_host']}. Change it with /host "
-                               "<address>, e.g. /host 192.168.1.20 for Ollama on another computer.")
+                               "<address>, e.g. /host 192.168.1.20 for Ollama on another computer, and back to this "
+                               f"computer's with /host default ({config_module.DEFAULTS['ollama_host']}).")
 
-    def _set_host(self, text: str) -> None:
+    def _set_host(self, text: str, then=None) -> None:
         """
         Talks to Ollama at another address from now on and saves it to config.json, keeping the conversation:
         from /host, and from the settings view's "Save". The panel shows the new server, and the model is checked
-        there again.
+        there again. then, if given, is called after the change (the settings' model, switched at the new address).
         """
         if not self.session:
             return
@@ -1054,12 +1104,23 @@ class MainWindow(QMainWindow):
             config_module.save_setting("ollama_host", host)
             self.settings["ollama_host"] = host
             self._local_notice(f"The Ollama address is now {host}.")
-            if error:
-                self._local_error(error)
+            if then:
+                then()
+            elif error:
+                self._local_error(error)  # Not when the model is switched next: it is checked again then
             self._show_ollama()
             self._poll_ollama()
-        self._ollama_state = None  # "Checking…" for the new address, not the old server's state
+        self._host_changed()
         self._run(session.set_host(host), changed)
+
+    def _host_changed(self) -> None:
+        """
+        Forgets what the panel knew of the old address's server: it shows "Checking…" for the new one until the
+        next poll, and a server Local Fox started is no longer followed as starting (it is still its own, stopped
+        when Local Fox closes, and shown again as such if the address comes back to it).
+        """
+        self._ollama_state = None
+        self._serve_started = 0.0
 
     def _context_command(self, argument: str) -> None:
         if not self.session:

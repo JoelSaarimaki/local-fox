@@ -89,3 +89,63 @@ def test_the_wheel_passes_over_dropdowns_and_numbers_to_the_scrolled_settings(ap
             # Ignored, so Qt hands a real wheel event on to the scroll area (a sent one is not handed on)
             assert not event.isAccepted(), key
         assert form.values()[key] == before, key
+
+def test_each_setting_can_be_set_back_to_its_default(app):
+    from local_fox.ui.settings_view import AppSettingsForm
+    changed = {**config.DEFAULTS, "ollama_host": "http://192.168.1.20:11434", "num_ctx": 131072, "num_thread": 4,
+               "think": "high", "temperature": 0.3, "auto_approve_tools": ["get_outline"], "font_size": 12,
+               "bundled_tools": False, "ollama_api_key": "secret", "model": "gemma4:26b"}
+    form = AppSettingsForm(changed)
+    assert all(form.default_buttons[key].isEnabled() for key in changed if changed[key] != config.DEFAULTS[key])
+    assert not form.default_buttons["seed"].isEnabled()  # Already the default
+    form.default_buttons["ollama_host"].click()
+    assert form.values()["ollama_host"] == config.DEFAULTS["ollama_host"] and not form.default_buttons["ollama_host"].isEnabled()
+    assert form.values()["model"] == "gemma4:26b"  # The others stay
+    # "Restore defaults" sets them all but the API key, which is hard to get back
+    form.restore_defaults()
+    assert form.values() == {**config.DEFAULTS, "ollama_api_key": "secret"}
+    form.default_buttons["ollama_api_key"].click()
+    assert form.values() == config.DEFAULTS
+
+def test_the_model_field_lists_the_models_at_the_address_typed(app):
+    from local_fox.ui.settings_view import AppSettingsForm
+    form = AppSettingsForm({**config.DEFAULTS, "model": "flint:40b"}, models=["flint:40b", "gemma4:26b"])
+    wanted = []
+    form.models_wanted.connect(wanted.append)
+    form.want_models()
+    assert wanted == ["http://127.0.0.1:11434"]
+    form.fields["ollama_host"].setText("192.168.1.20")
+    form.want_models()  # As after the pause in typing
+    assert wanted[-1] == "http://192.168.1.20:11434" and "Listing" in form.models_note.text()
+    form.show_models("http://127.0.0.1:11434", ["old:1b"])  # A late answer of the address before: dropped
+    field = form.fields["model"]
+    assert [field.itemText(i) for i in range(field.count())] == ["flint:40b", "gemma4:26b"]
+    form.show_models("http://192.168.1.20:11434", ["llama3.1:latest", "qwen3.6:35b"])
+    assert [field.itemText(i) for i in range(field.count())] == ["llama3.1:latest", "qwen3.6:35b"]
+    assert form.values()["model"] == "flint:40b"  # Kept as it was, and the note says the server lacks it
+    assert "does not have flint:40b" in form.models_note.text()
+    field.setCurrentText("llama3.1")
+    assert "2 models installed at http://192.168.1.20:11434" in form.models_note.text()
+    form.fields["ollama_host"].setText("http://192.168.1.30:11434")
+    form.want_models()
+    form.show_models("http://192.168.1.30:11434", None, "it did not answer in time")
+    assert "did not answer" in form.models_note.text() and field.count() == 0 and form.values()["model"] == "llama3.1"
+    form.fields["ollama_host"].setText("http://")
+    form.want_models()
+    assert len(wanted) == 3 and "not complete" in form.models_note.text()
+
+def test_the_address_is_saved_complete_and_checked(app, tmp_path, monkeypatch):
+    from local_fox.ui.settings_view import SettingsDialog
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("LOCAL_FOX_CONFIG", str(path))
+    dialog = SettingsDialog(None)
+    saved = []
+    dialog.saved.connect(lambda settings, clear, tools: saved.append((settings, clear)))
+    dialog.app_form.fields["ollama_host"].setText("192.168.1.20")
+    dialog._save(True)
+    assert saved[-1] == ({**config.DEFAULTS, "ollama_host": "http://192.168.1.20:11434"}, True)
+    assert json.loads(path.read_text(encoding="utf-8"))["ollama_host"] == "http://192.168.1.20:11434"
+    dialog = SettingsDialog(None)
+    dialog.app_form.fields["ollama_host"].setText("not an address")
+    dialog._save(False)
+    assert "is not an address" in dialog.error.text() and len(saved) == 1

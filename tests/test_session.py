@@ -884,3 +884,26 @@ def test_cpu_threads_are_sent_only_when_set(tmp_path):
     asyncio.run(session.send("Again"))
     assert client.requests[1]["options"]["num_thread"] == 4
     assert '"num_thread": 4' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
+
+def test_another_ollama_address_forgets_the_old_servers_model_and_names_the_models_there(tmp_path, monkeypatch):
+    session, _, _ = make_session(tmp_path, [])
+    session.capabilities, session.max_context, session.connection_failed = ["tools"], 262144, True
+
+    class Remote:
+        def __init__(self, host):
+            self.host = host
+
+        async def show(self, model):
+            raise session_module.ollama.ResponseError(f'model "{model}" not found, try pulling it first', 404)
+
+        async def list(self):
+            return SimpleNamespace(models=[SimpleNamespace(model="llama3.1:latest"), SimpleNamespace(model="gemma4:26b")])
+    import local_fox.session as session_module
+    monkeypatch.setattr(session_module.ollama, "AsyncClient", Remote)
+    error = asyncio.run(session.set_host("http://192.168.1.20:11434"))
+    assert "Ollama does not have qwen3.6:35b" in error and "The models it has: gemma4:26b, llama3.1:latest." in error
+    assert session.capabilities is None and session.max_context is None and not session.connection_failed
+    # Through the settings and a clear, the model is checked there by the new conversation
+    session.capabilities = ["tools"]
+    asyncio.run(session.apply_settings({**session.config, "ollama_host": "http://192.168.1.30:11434"}))
+    assert session.client.host == "http://192.168.1.30:11434" and session.capabilities is None

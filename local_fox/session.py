@@ -300,7 +300,13 @@ class Session:
         try:
             info = await self.client.show(self.model)
         except ollama.ResponseError as error:
-            return explain(error.error, self.model, self.num_ctx)
+            installed = None
+            if "not found" in error.error.lower():
+                try:
+                    installed = await ollama_server.installed_models(self.client)
+                except Exception:
+                    pass  # Explained without them
+            return explain(error.error, self.model, self.num_ctx, installed)
         except (httpx.HTTPError, ConnectionError) as error:
             self.connection_failed = True
             return explain_connection(error, self.config["ollama_host"], sent=False)  # No message of the user's
@@ -553,8 +559,8 @@ class Session:
         old = self.config
         self.config = dict(config)
         if config["ollama_host"] != old.get("ollama_host"):
-            self.client = ollama.AsyncClient(host=config["ollama_host"])
-            self.capabilities = None  # Read again from the new address by the next conversation
+            self._use_host(config["ollama_host"])  # The model is read again there by the next conversation
+            self.log.write("setting", ollama_host=config["ollama_host"])
         if config["model"] != self.model:
             self.model = config["model"]
             self.capabilities = None
@@ -566,12 +572,24 @@ class Session:
         Talks to the Ollama server at another address from now on, e.g. one on another computer, and checks the
         model there again. The conversation stays: the server only runs the model. Returns the check's error.
         """
-        self.config["ollama_host"] = host
-        self.client = ollama.AsyncClient(host=host)
+        self._use_host(host)
         error = await self.load_model_info()
+        if not error and self.max_context and self.num_ctx > self.max_context:
+            self.num_ctx = self.max_context  # The other server may have another version of the model
         self.log.write("setting", ollama_host=host, error=error)
         self.frontend.status()
         return error
+
+    def _use_host(self, host: str) -> None:
+        """
+        Talks to the Ollama server at host from now on. What was known of the model came from the old server (the
+        other computer may have another version of it, or none), so it is read again; so are the models' file sizes.
+        """
+        self.config["ollama_host"] = host
+        self.client = ollama.AsyncClient(host=host)
+        self.capabilities, self.max_context = None, None
+        self.connection_failed = False  # The old server's failure says nothing of the new one
+        ollama_server.forget_file_sizes()
 
     async def set_model(self, model: str) -> str | None:
         self.model = model
@@ -585,7 +603,10 @@ class Session:
         return error
 
     async def list_models(self) -> list[str]:
-        return sorted(m.model for m in (await self.client.list()).models)
+        """
+        Returns the models installed at the session's address. Raises if the server does not answer in time.
+        """
+        return await ollama_server.installed_models(self.client)
 
     async def server_state(self) -> ollama_server.State:
         """

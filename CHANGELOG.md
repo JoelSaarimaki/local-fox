@@ -4,6 +4,21 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.2 (2026-11-18)
+
+- **Switching to Ollama on another computer** works through the settings as through `/host`: the settings view's
+  model field lists the models installed at the address typed in `ollama_host` (and says if that server does not
+  have the model chosen), and on "Save" the model is switched after the address, at the new server. The address
+  is saved complete (`192.168.1.20` as `http://192.168.1.20:11434`) and checked before saving.
+- After a change of address, what was known of the old server's model is read again from the new one (its
+  largest context, whether it thinks), the Ollama panel shows "Checking…" instead of the old server's state, and an
+  `ollama serve` started by Local Fox is no longer shown or stopped as the other computer's server. "Save and clear"
+  says in the feed which address the new conversation uses.
+- A model the server does not have is explained with the models it has. The model menu says when Ollama does not
+  answer instead of staying at "Loading the models…".
+- **Back to the defaults**: a "Default" button beside each setting, "Restore defaults" for all of them but the API
+  key, and `/host default` for this computer's Ollama.
+
 ## 1.1.1 (2026-11-14)
 
 - Texts that agree with what Local Fox does: Save's tooltip and notice name the four settings that apply at once,

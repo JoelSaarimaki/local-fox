@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import ollama
+
 DEFAULT_PORT = 11434
 LOG_NAME = "ollama-serve.log"
 POLL_TIMEOUT = 5  # Seconds for 'ollama ps', which answers at once also while a model loads
@@ -120,6 +122,27 @@ async def _read_file_sizes(client, timeout: float) -> None:
     except Exception:
         return
     _file_sizes.update({m.model: m.size or 0 for m in models if getattr(m, "model", None)})
+
+def forget_file_sizes() -> None:
+    """
+    Forgets the models' file sizes, when Local Fox talks to Ollama at another address: another computer's model of
+    the same name can be another size, and the share of a model in the GPU is judged by its file size.
+    """
+    _file_sizes.clear()
+
+async def installed_models(client, timeout: float = POLL_TIMEOUT) -> list[str]:
+    """
+    Returns the names of the models the server has installed ('ollama list'), sorted. Raises the client's error, or
+    TimeoutError, if the server does not answer in time: the ollama client has no timeout of its own.
+    """
+    return sorted(m.model for m in (await asyncio.wait_for(client.list(), timeout)).models if getattr(m, "model", None))
+
+async def models_at(host: str, timeout: float = POLL_TIMEOUT) -> list[str]:
+    """
+    Returns the models installed at an address that the session does not talk to yet, e.g. one typed in the
+    settings view, so that the user chooses from the models of the server they switch to. Raises as installed_models.
+    """
+    return await installed_models(ollama.AsyncClient(host=host), timeout)
 
 def activity(state: State | None, model: str, phase: str | None) -> str:
     """
