@@ -2,7 +2,8 @@
 The dialog of the Ollama panel's "Connect to Ollama server": the address of an Ollama server that already runs, e.g.
 on another computer, with the current address filled in. "Connect" checks that Ollama answers there while the
 dialog stays open ("Connecting to …"), and closes it only when it does; otherwise the dialog says why, below the
-address, so that it can be corrected and tried again. The window switches to the address after the dialog
+address, so that it can be corrected and tried again. The address in use is checked too: the dialog says whether
+Local Fox is already connected to a server there, or that none answers. The window switches to the address after the dialog
 (MainWindow._connect_ollama); the dialog itself changes nothing.
 """
 from PySide6.QtCore import Qt
@@ -58,17 +59,15 @@ class ConnectDialog(QDialog):
 
     def try_connect(self) -> None:
         """
-        Checks the address in the field: one that is not an address, or the one in use, is told at once; any other
-        is checked, and the dialog closes when Ollama answers there.
+        Checks the address in the field: one that is not an address is told at once; any other is checked, the one
+        in use too (whether a server answers there is what the user wants to know), and the dialog closes when
+        Ollama answers at another one.
         """
         text = self.address.text().strip()
         host = ollama_server.normalize_host(text)
         if not host:
             self._show(f"'{text}' is not an address. Give it as e.g. 192.168.1.20, 192.168.1.20:11434 or "
                        "http://192.168.1.20:11434." if text else "Give the address of the Ollama server.")
-            return
-        if host == self.current:
-            self._show(f"Local Fox already uses the Ollama server at {host}.")
             return
         self._asked = host
         self._busy(True)
@@ -77,19 +76,26 @@ class ConnectDialog(QDialog):
 
     def checked(self, host: str, error: str | None) -> None:
         """
-        Takes the check's answer: closes the dialog with the address if Ollama answered, else says why.
+        Takes the check's answer: closes the dialog with the address if Ollama answered at another one, says so if
+        it answered at the one in use, and else says why not, with what to try for a server of this computer or of
+        another one.
         """
         if host != self._asked or not self.isVisible():
             return  # Cancelled, or an earlier address
         self._asked = ""
         self._busy(False)
-        if error is None:
+        self.address.setFocus()
+        if error is None and host == self.current:
+            self._show(f"Local Fox is already connected to the Ollama server at {host}.", error=False)
+        elif error is None:
             self.host = host
             self.accept()
-            return
-        self._show(f"Ollama at {host} could not be reached: {error}. Check that Ollama runs there and listens on the "
-                   f"network, and that the firewall lets port {ollama_server.port_of(host)} in.")
-        self.address.setFocus()
+        elif ollama_server.is_local(host):
+            self._show(f"No Ollama server answers at {host}: {error}. Start one with \"Start Ollama server\" in the "
+                       "Ollama panel, or start the Ollama app.")
+        else:
+            self._show(f"Ollama at {host} could not be reached: {error}. Check that Ollama runs there and listens on the "
+                       f"network, and that the firewall lets port {ollama_server.port_of(host)} in.")
 
     def _busy(self, busy: bool) -> None:
         self.address.setEnabled(not busy)
@@ -97,7 +103,7 @@ class ConnectDialog(QDialog):
 
     def _show(self, text: str, error: bool = True) -> None:
         """
-        Shows a line below the address: an error in the error color, or the progress dimmed.
+        Shows a line below the address: an error in the error color, or the progress or information dimmed.
         """
         self.status.setObjectName("error" if error else "dim")
         self.status.style().unpolish(self.status)  # The object name's style applies only when polished again

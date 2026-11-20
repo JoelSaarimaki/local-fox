@@ -588,9 +588,23 @@ def test_the_connect_dialog_checks_the_address_and_says_why_it_failed(app):
     dialog.address.setText("not an address")
     dialog.connect_button.click()
     assert "is not an address" in dialog.status.text() and not asked and dialog.isVisible()
+    # The address in use is checked too: nothing answers there, or Local Fox is already connected to it
     dialog.address.setText("127.0.0.1")
     dialog.connect_button.click()
-    assert "already uses" in dialog.status.text() and not asked
+    assert asked[-1][0] == "http://127.0.0.1:11434"
+    asked[-1][1]("nothing accepted the connection there")
+    assert dialog.isVisible() and dialog.status.objectName() == "error"
+    assert dialog.status.text() == ("No Ollama server answers at http://127.0.0.1:11434: nothing accepted the connection "
+                                    "there. Start one with \"Start Ollama server\" in the Ollama panel, or start the Ollama app.")
+    dialog.connect_button.click()
+    asked[-1][1](None)
+    assert dialog.isVisible() and dialog.status.objectName() == "dim" and not dialog.host
+    assert dialog.status.text() == "Local Fox is already connected to the Ollama server at http://127.0.0.1:11434."
+    # Another server of this computer that does not answer gets the same advice
+    dialog.address.setText("localhost:11500")
+    dialog.connect_button.click()
+    asked[-1][1]("nothing accepted the connection there")
+    assert dialog.status.text().startswith("No Ollama server answers at http://localhost:11500")
     dialog.address.setText("192.168.1.30")
     dialog.connect_button.click()
     assert asked[-1][0] == "http://192.168.1.30:11434" and "Connecting to http://192.168.1.30:11434" in dialog.status.text()

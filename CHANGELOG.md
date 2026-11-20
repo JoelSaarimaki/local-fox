@@ -4,6 +4,13 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.7 (2026-11-20)
+
+- "Connect to Ollama server" checks the address in use too, instead of only saying that Local Fox already uses
+  it: it says that Local Fox is already connected to the server there, or that no server answers. For an address
+  of this computer, the advice is to start Ollama ("Start Ollama server", or the Ollama app) rather than to check
+  the network and the firewall.
+
 ## 1.1.6 (2026-11-20)
 
 - **"Connect to Ollama server" has a dialog of its own**, narrower than before, which checks the address while it
