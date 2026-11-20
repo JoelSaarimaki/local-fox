@@ -115,9 +115,18 @@ def test_missing_and_broken_arguments(tmp_path):
                                               [chunk("ok", done=True)]])
     asyncio.run(session.send("Read"))
     first, second = tool_messages(session)
-    assert "missing the required argument path" in first
+    assert "missing the required argument path" in first and "It came with no arguments, so it was not run" in first
     assert "not valid JSON" in second
     assert mcp.calls == []
+
+def test_a_missing_argument_is_answered_with_the_arguments_the_call_had(tmp_path):
+    # qwen3.6:35b sent an edit with its old and new text but no path, and took the error for a fault of the tool's
+    session, _, mcp = make_session(tmp_path, [[chunk(tool_calls=[call("read_file_with_metadata", {"start_line": 1, "end_line": 2})], done=True)],
+                                              [chunk("ok", done=True)]])
+    asyncio.run(session.send("Read"))
+    response, = tool_messages(session)
+    assert "missing the required argument path. It came with end_line and start_line only, so it was not run." in response
+    assert response.endswith("Call it again with path as well.") and mcp.calls == []
 
 def test_skip_and_allow_all(tmp_path):
     calls = [call("read_file_with_metadata", {"path": "a.py"})] * 3

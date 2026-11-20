@@ -7,4 +7,4 @@ the command line (local_fox.cli) and from the comparison scripts. The window is 
 APP_NAME = "Local Fox"
 # The one place of the version (semantic versioning; see "Versions" in AGENTS.md): pyproject.toml, the
 # executable's version resource and the macOS bundle read it from here
-__version__ = "1.1.3"
+__version__ = "1.1.4"

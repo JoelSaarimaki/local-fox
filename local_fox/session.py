@@ -1224,8 +1224,12 @@ class Session:
             properties = tool.schema.get("properties", {})
             described = ", ".join(f"{name} ({properties.get(name, {}).get('type', 'any')}{', required' if name in tool.schema.get('required', []) else ''})"
                                   for name in properties)
+            # What the call came with, as Ollama gave it: a model that wrote long texts first (an edit's old and new
+            # text) and left the path out took "missing path" for a fault of the tool's, as it was sure it had given one
+            given = (f"It came with {_and(sorted(args))} only" if args else "It came with no arguments") + ", so it was not run"
             self._respond(entry, f"Error: the call to {tool.exposed} is missing the required argument{'s' if len(missing) > 1 else ''} "
-                                 f"{', '.join(missing)}. Its arguments are: {described}.", c.FAILED)
+                                 f"{', '.join(missing)}. {given}. Its arguments are: {described}. Call it again with "
+                                 f"{_and(missing)} as well.", c.FAILED)
             return
         auto = self.config.get("auto_approve_tools") or []
         if not (self.allow_all or tool.name in auto or tool.exposed in auto):
@@ -1281,6 +1285,12 @@ def _server_stopped(error: BaseException) -> bool:
     """
     names = {type(e).__name__ for e in (error, error.__cause__, error.__context__) if e is not None}
     return bool(names & {"ClosedResourceError", "BrokenResourceError", "EndOfStream"}) or "connection closed" in str(error).lower()
+
+def _and(names: list[str]) -> str:
+    """
+    Returns names as a sentence lists them: "a", "a and b", "a, b and c".
+    """
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 def _seconds(nanoseconds) -> float | None:
     """

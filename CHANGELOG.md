@@ -4,6 +4,13 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.4 (2026-11-20)
+
+- **A call that lacks a required argument is answered with the arguments it had**, that it was not run, and to call
+  it again with the missing one: "It came with new_text and old_text only". qwen3.6:35b sent an edit without its
+  path, read the plain "missing the required argument path" as a fault of the tool's ("which is odd since I
+  provided it"), and got it right only on its second try.
+
 ## 1.1.3 (2026-11-18)
 
 - **A connection to Ollama that died is noticed.** Local Fox waits for a reply with no time limit, as a model that
