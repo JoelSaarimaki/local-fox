@@ -1,9 +1,10 @@
 """
 The Ollama panel below the filemap: the address of the Ollama server, a row with the model and where it runs
 ("flint:40b  77 % CPU / 23 % GPU"), a short text of what the server does ("Loading the model…", "Thinking…",
-"Idle", "Not running"), and a row for the "Start Ollama server" button while a server on this computer does not
-answer, or "Stop Ollama server" while one answers. The window polls the server and starts it (main_window.py);
-the panel only shows what it is given.
+"Idle", "Not running"), a row for the "Start Ollama server" button while a server on this computer does not
+answer, "Stop Ollama server" while one answers, or "Disconnect" while the address is another computer's, and below
+it "Connect to Ollama server", for a server that runs elsewhere. The window polls the server, starts it and
+connects to it (main_window.py); the panel only shows what it is given.
 
 Every row is one line, cut with "…" when it is too long, and the button row keeps its height without a button, so
 the panel never changes its height as its texts change, which would move the filemap above it.
@@ -59,6 +60,8 @@ def _button_page(button: QPushButton) -> QWidget:
 class OllamaPanel(QFrame):
     start_clicked = Signal()
     stop_clicked = Signal()
+    connect_clicked = Signal()
+    disconnect_clicked = Signal()
 
     def __init__(self):
         super().__init__(objectName="ollama")
@@ -91,27 +94,40 @@ class OllamaPanel(QFrame):
         self.stop_button.setCursor(Qt.PointingHandCursor)
         self.stop_button.setToolTip("Stop the Ollama server of this computer, e.g. to run 'ollama serve' in a console of your own")
         self.stop_button.clicked.connect(lambda checked=False: self.stop_clicked.emit())
+        self.disconnect_button = QPushButton("Disconnect")
+        self.disconnect_button.setCursor(Qt.PointingHandCursor)
+        self.disconnect_button.setToolTip("Use the Ollama server of this computer again; the other computer's server keeps running")
+        self.disconnect_button.clicked.connect(lambda checked=False: self.disconnect_clicked.emit())
+        self.connect_button = QPushButton("Connect to Ollama server")
+        self.connect_button.setCursor(Qt.PointingHandCursor)
+        self.connect_button.setToolTip("Use an Ollama server that already runs, e.g. on another computer, by its address")
+        self.connect_button.clicked.connect(lambda checked=False: self.connect_clicked.emit())
         # A stacked layout is as high as its highest page, so the row keeps the buttons' height also when empty
         self._buttons = QStackedLayout()
         self._empty = QWidget(objectName="ollama-buttons")
         self._buttons.addWidget(self._empty)
         self._buttons.addWidget(_button_page(self.start_button))
         self._buttons.addWidget(_button_page(self.stop_button))
-        for button in (self.start_button, self.stop_button):
+        self._buttons.addWidget(_button_page(self.disconnect_button))
+        for button in (self.start_button, self.stop_button, self.disconnect_button):
             # A hidden button would not count in its page's size, and the empty row would be lower
             policy = button.sizePolicy()
             policy.setRetainSizeWhenHidden(True)
             button.setSizePolicy(policy)
             button.hide()
         layout.addLayout(self._buttons)
+        # Always shown, so the panel's height stays the same
+        layout.addWidget(_button_page(self.connect_button))
 
     def show_state(self, host: str, text: str, can_start: bool, tip: str = "", can_stop: bool = False,
-                   model: str = "", placement: str = "", model_tip: str = "") -> None:
+                   model: str = "", placement: str = "", model_tip: str = "", remote: bool = False,
+                   connecting: bool = False) -> None:
         """
         Shows the address, the model and where it runs, the text of what the server does, and the start button when
-        the server can be started here or the stop button when one of this computer runs (never both: one that
-        answers is not started). The text is never orange: a server that is not running has the start button
-        below it, which draws the eye enough.
+        the server can be started here, the stop button when one of this computer runs (never both: one that
+        answers is not started), or the disconnect button when the address is another computer's (remote). The
+        connect button says "Connecting…" while an address given to it is checked. The text is never orange: a
+        server that is not running has the start button below it, which draws the eye enough.
         """
         self.host_label.set_full_text(host.removeprefix("http://"), host)
         self.model_label.set_full_text(model, model_tip)
@@ -119,7 +135,11 @@ class OllamaPanel(QFrame):
         self.placement_label.setToolTip(model_tip)
         self.status_label.set_full_text(text, tip)
         # The buttons are hidden on the pages they are not shown on, so that isHidden() tells which one shows
+        can_start, can_stop = can_start and not remote, can_stop and not remote
         self.start_button.setVisible(can_start)
         self.stop_button.setVisible(can_stop and not can_start)
-        page = 1 if can_start else 2 if can_stop else 0
+        self.disconnect_button.setVisible(remote)
+        page = 3 if remote else 1 if can_start else 2 if can_stop else 0
         self._buttons.setCurrentIndex(page)
+        self.connect_button.setText("Connecting…" if connecting else "Connect to Ollama server")
+        self.connect_button.setEnabled(not connecting)

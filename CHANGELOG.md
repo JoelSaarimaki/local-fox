@@ -4,6 +4,15 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.5 (2026-11-20)
+
+- **"Connect to Ollama server"** in the Ollama panel asks for the address of an Ollama server that already runs,
+  e.g. on another computer, with the current address filled in, and uses it if Ollama answers there: the
+  conversation stays and the address is saved, as with `/host`. One that does not answer is not switched to.
+- **"Disconnect"** takes the place of "Stop Ollama server" while the address is another computer's, and goes back
+  to this computer's Ollama (the last address of this computer used, or the default). The other computer's server
+  keeps running.
+
 ## 1.1.4 (2026-11-20)
 
 - **A call that lacks a required argument is answered with the arguments it had**, that it was not run, and to call

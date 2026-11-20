@@ -108,7 +108,10 @@ project stay on yours: only the requests to the model go there, and the tools st
     shows the other computer's server; it has no start or stop button, as those work only for a server on your
     computer. The model menu lists the other computer's models, and so does the settings view's model field as soon
     as the address is typed there: if that Ollama does not have the model, the feed says so and names the models it has.
-3.  **Back to your own computer**: `/host default`, or the **Default** button beside `ollama_host` in the settings.
+    Or choose **Connect to Ollama server** in the Ollama panel below the filemap and give the address there: it
+    is switched to only if Ollama answers at it.
+3.  **Back to your own computer**: **Disconnect** in the Ollama panel, `/host default`, or the **Default** button
+    beside `ollama_host` in the settings.
 
 Ollama has no passwords: anyone who can reach that port can use the server. Open it only on a network you trust.
 
@@ -217,6 +220,11 @@ Local Fox starts by asking for the project, before the window opens:
   started again by the app, so quit the app from its icon instead. On Linux, Ollama's installer sets the server
   up as a system service that runs as another user, which Local Fox cannot stop: use `sudo systemctl stop ollama`. Whatever the server was doing ends with it:
   a reply in progress fails, and an `ollama pull` continues where it was when run again.
+  **Connect to Ollama server**, below them, asks for the address of an Ollama server that already runs, e.g. on
+  another computer (the current address is filled in), and uses it if Ollama answers there, as `/host` does: the
+  conversation stays, and the address is saved as `ollama_host`. While the address is another computer's, the
+  panel has **Disconnect** instead of the stop button, which goes back to this computer's Ollama (the last address
+  of this computer used, or the default) and leaves the other computer's server running.
 - **Add path to allowed**, **Add path to read-only** and **Add path to forbidden** in the filemap's menu add the
   path to `allowed_paths` (inside a forbidden folder),
   `read_only_files` or `forbidden_paths` of the project's tools config, or remove it from there. Only you make

@@ -556,3 +556,81 @@ def test_a_keepalive_socket_connects(tmp_path):
         assert asyncio.run(ollama_server.models_at(host)) == ["llama3.1:latest"]
     finally:
         server.shutdown()
+
+def test_connect_is_always_offered_and_disconnect_takes_the_stop_buttons_place_for_another_computer(app):
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow(dict(config.DEFAULTS))
+    panel = window.ollama_panel
+    try:
+        window.session = fake_session()
+        window._ollama_state = State(True)
+        window._show_ollama()
+        assert not panel.stop_button.isHidden() and panel.disconnect_button.isHidden()
+        assert panel.connect_button.isEnabled() and panel.connect_button.text() == "Connect to Ollama server"
+        height = panel.sizeHint().height()
+        window.session = fake_session("http://192.168.1.20:11434")
+        window._show_ollama()
+        assert panel.stop_button.isHidden() and panel.start_button.isHidden() and not panel.disconnect_button.isHidden()
+        window._ollama_state = State(False)  # Not reachable: still nothing to start here
+        window._show_ollama()
+        assert panel.start_button.isHidden() and not panel.disconnect_button.isHidden()
+        assert panel.sizeHint().height() == height  # The panel keeps its height
+    finally:
+        window.session = None
+        window.close()
+
+def test_connect_switches_only_to_a_server_that_answers_and_disconnect_comes_back(app, monkeypatch):
+    import time as clock
+
+    from local_fox.ui import main_window as window_module
+    from local_fox.ui.main_window import MainWindow
+    window = MainWindow({**config.DEFAULTS, "ollama_host": "http://127.0.0.1:11500"})  # This computer's, another port
+    notices, errors, hosts, typed = [], [], [], []
+    monkeypatch.setattr(window, "_local_notice", notices.append)
+    monkeypatch.setattr(window, "_local_error", errors.append)
+    monkeypatch.setattr(window, "_set_host", lambda text, then=None: hosts.append(text))
+    answers = {"192.168.1.20": ["llama3.1:latest"]}
+
+    async def models_at(host, timeout=5):
+        for address, models in answers.items():
+            if address in host:
+                return models
+        raise ConnectionError("Failed to connect to Ollama.")
+    monkeypatch.setattr(window_module.ollama_server, "models_at", models_at)
+
+    def get_text(parent, title, label, mode, text):
+        typed.append(text)  # The current address is filled in
+        return answer["text"], True
+    monkeypatch.setattr(window_module.QInputDialog, "getText", get_text)
+
+    def wait_for(condition):
+        end = clock.monotonic() + 5
+        while not condition() and clock.monotonic() < end:
+            app.processEvents()
+            clock.sleep(0.01)
+    try:
+        window.session = fake_session("http://127.0.0.1:11500")
+        answer = {"text": "192.168.1.30"}
+        window.ollama_panel.connect_button.click()
+        wait_for(lambda: errors)
+        assert typed == ["http://127.0.0.1:11500"] and hosts == []
+        assert "could not be reached" in errors[-1] and "still uses http://127.0.0.1:11500" in errors[-1]
+        assert window.ollama_panel.connect_button.isEnabled()
+        answer["text"] = "192.168.1.20"
+        window.ollama_panel.connect_button.click()
+        wait_for(lambda: hosts)
+        assert hosts == ["http://192.168.1.20:11434"]
+        answer["text"] = "not an address"
+        window.ollama_panel.connect_button.click()
+        assert "is not an address" in errors[-1] and len(hosts) == 1
+        window.session = fake_session("http://192.168.1.20:11434")
+        window._ollama_state = State(True)
+        window._show_ollama()
+        window.ollama_panel.disconnect_button.click()
+        assert hosts[-1] == "http://127.0.0.1:11500"  # This computer's address of before, not the default
+        window.session.running = True
+        window.ollama_panel.connect_button.click()
+        assert "Stop the model" in errors[-1] and len(typed) == 3
+    finally:
+        window.session = None
+        window.close()

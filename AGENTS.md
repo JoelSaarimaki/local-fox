@@ -68,7 +68,9 @@ has been reported to loop there.
   never on its own or after a failed request, and the server it started is stopped when the window closes.
   "Stop Ollama server" stops any Ollama server of this computer at the address (the user may want a visible one
   in a console instead of a hidden one): found by its port (`ollama_server.other_server`), only if the program
-  is Ollama, and after the user confirms it when Local Fox did not start it.
+  is Ollama, and after the user confirms it when Local Fox did not start it. "Connect to Ollama server"
+  (`_connect_ollama`) switches the address only to a server that answers, and "Disconnect" (in the stop button's
+  place for another computer's address) goes back to this computer's; neither starts or stops any server.
 - **Ollama's clients are made by `ollama_server.client`**, with TCP keepalive: replies are read with no time
   limit (a model loading or reading a long prompt sends nothing for minutes), and without keepalive a connection
   that died while the computer slept left the turn at "Thinking…" for good. Don't make `ollama.AsyncClient`s elsewhere.
