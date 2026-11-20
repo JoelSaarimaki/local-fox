@@ -163,8 +163,9 @@ Local Fox starts by asking for the project, before the window opens:
 - **Local Fox's own instructions template**: the project instructions come from `local_fox/templates/instructions.md`
   instead of the tools' template, which is written for ollmcp. It has the same workflow (answering, planning
   and implementing modes, verifying with the listed commands), but names the tools as the model sees them
-  (`edit_file`, not `dev_edit_file`), points the model to the file list that follows the instructions, and tells
-  it that nobody prompts it to continue. A project set up before keeps its file: to switch, delete its
+  (`edit_file`, not `dev_edit_file`), points the model to the file list that follows the instructions, tells it to
+  read the project's `AGENTS.md` (if it has one) before planning or implementing, and tells it that nobody prompts it
+  to continue. A project set up before keeps its file: to switch, delete its
   `instructions.md` (or merge your changes into the new template) and run `/setup`.
 - **Running them**: a project's `.mcp.json` starts the tools with `python -m ollmcp_tools`, as ollmcp and other
   clients do. Local Fox runs that server with its own copy instead: from the source with the Python that runs

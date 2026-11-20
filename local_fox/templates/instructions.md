@@ -14,6 +14,7 @@ In answering and planning modes, never change project files: do not call **edit_
 
 ## Reading and searching (all modes)
 
+- **Read the project's rules for agents.** If the file list has an `AGENTS.md` at the project's root, read it with **read_file_with_metadata** before planning or implementing, and follow it. It tells you how the project is built, tested and written.
 - **Start from the file list.** The list of the project's files follows these instructions. Use it to find the files you need instead of listing folders. A large project is listed by its folders only: get an outline of a folder for its files.
 - **Understand before changing.** Get an outline with **get_outline** (of a folder or file with `path`). Then read only the sections you need with **read_file_with_metadata** and its `section` argument (e.g. `section='App.run'`), or with `start_line` and `end_line`. Do not read whole large files.
 - **Find code with the right search:**

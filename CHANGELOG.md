@@ -4,6 +4,13 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.2.0 (2026-11-20)
+
+- The instructions template tells the model to read the project's `AGENTS.md`, if it has one, before planning or
+  implementing, and to follow it. Projects set up earlier keep their instructions: add the line from the
+  template to `instructions.md` in the project's Local Fox folder, or delete that file and choose
+  "Set up project" in the ≡ menu (`/setup`).
+
 ## 1.1.9 (2026-11-20)
 
 - The model is no longer told to "answer now", save the plan or make the change when its context fills. The warning
