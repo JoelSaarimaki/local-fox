@@ -566,7 +566,7 @@ def test_connect_is_always_offered_and_disconnect_takes_the_stop_buttons_place_f
         window._ollama_state = State(True)
         window._show_ollama()
         assert not panel.stop_button.isHidden() and panel.disconnect_button.isHidden()
-        assert panel.connect_button.isEnabled() and panel.connect_button.text() == "Connect to Ollama server"
+        assert not panel.connect_button.isHidden() and panel.connect_button.text() == "Connect to Ollama server"
         height = panel.sizeHint().height()
         window.session = fake_session("http://192.168.1.20:11434")
         window._show_ollama()
@@ -579,50 +579,78 @@ def test_connect_is_always_offered_and_disconnect_takes_the_stop_buttons_place_f
         window.session = None
         window.close()
 
+def test_the_connect_dialog_checks_the_address_and_says_why_it_failed(app):
+    from local_fox.ui.connect_dialog import WIDTH, ConnectDialog
+    asked = []
+    dialog = ConnectDialog(None, "http://127.0.0.1:11434", lambda host, done: asked.append((host, done)))
+    dialog.show()
+    assert dialog.address.text() == "http://127.0.0.1:11434" and dialog.width() == WIDTH
+    dialog.address.setText("not an address")
+    dialog.connect_button.click()
+    assert "is not an address" in dialog.status.text() and not asked and dialog.isVisible()
+    dialog.address.setText("127.0.0.1")
+    dialog.connect_button.click()
+    assert "already uses" in dialog.status.text() and not asked
+    dialog.address.setText("192.168.1.30")
+    dialog.connect_button.click()
+    assert asked[-1][0] == "http://192.168.1.30:11434" and "Connecting to http://192.168.1.30:11434" in dialog.status.text()
+    assert not dialog.address.isEnabled() and not dialog.connect_button.isEnabled()
+    asked[-1][1]("Failed to connect to Ollama.")  # The check's answer
+    assert dialog.isVisible() and dialog.address.isEnabled() and dialog.status.objectName() == "error"
+    assert "could not be reached: Failed to connect to Ollama." in dialog.status.text() and "port 11434" in dialog.status.text()
+    assert dialog.width() == WIDTH  # A long error wraps instead of widening the dialog
+    dialog.address.setText("192.168.1.20:11500")
+    dialog.connect_button.click()
+    asked[-1][1](None)
+    assert dialog.result() == ConnectDialog.Accepted and dialog.host == "http://192.168.1.20:11500"
+
 def test_connect_switches_only_to_a_server_that_answers_and_disconnect_comes_back(app, monkeypatch):
     import time as clock
 
     from local_fox.ui import main_window as window_module
     from local_fox.ui.main_window import MainWindow
     window = MainWindow({**config.DEFAULTS, "ollama_host": "http://127.0.0.1:11500"})  # This computer's, another port
-    notices, errors, hosts, typed = [], [], [], []
+    notices, errors, hosts, shown = [], [], [], []
     monkeypatch.setattr(window, "_local_notice", notices.append)
     monkeypatch.setattr(window, "_local_error", errors.append)
     monkeypatch.setattr(window, "_set_host", lambda text, then=None: hosts.append(text))
-    answers = {"192.168.1.20": ["llama3.1:latest"]}
 
     async def models_at(host, timeout=5):
-        for address, models in answers.items():
-            if address in host:
-                return models
+        if "192.168.1.20" in host:
+            return ["llama3.1:latest"]
         raise ConnectionError("Failed to connect to Ollama.")
     monkeypatch.setattr(window_module.ollama_server, "models_at", models_at)
-
-    def get_text(parent, title, label, mode, text):
-        typed.append(text)  # The current address is filled in
-        return answer["text"], True
-    monkeypatch.setattr(window_module.QInputDialog, "getText", get_text)
 
     def wait_for(condition):
         end = clock.monotonic() + 5
         while not condition() and clock.monotonic() < end:
             app.processEvents()
             clock.sleep(0.01)
+
+    def exec_(dialog):
+        # The user types the addresses of typed in turn, each checked through the window, and cancels at the end
+        dialog.show()
+        shown.append((dialog.address.text(), []))
+        for address in typed:
+            dialog.address.setText(address)
+            dialog.connect_button.click()
+            wait_for(lambda: dialog.address.isEnabled())
+            shown[-1][1].append(dialog.status.text())
+            if dialog.result() == window_module.ConnectDialog.Accepted:
+                return window_module.ConnectDialog.Accepted
+        dialog.reject()
+        return window_module.ConnectDialog.Rejected
+    monkeypatch.setattr(window_module.ConnectDialog, "exec", exec_)
     try:
         window.session = fake_session("http://127.0.0.1:11500")
-        answer = {"text": "192.168.1.30"}
+        typed = ["192.168.1.30", "192.168.1.20"]
         window.ollama_panel.connect_button.click()
-        wait_for(lambda: errors)
-        assert typed == ["http://127.0.0.1:11500"] and hosts == []
-        assert "could not be reached" in errors[-1] and "still uses http://127.0.0.1:11500" in errors[-1]
-        assert window.ollama_panel.connect_button.isEnabled()
-        answer["text"] = "192.168.1.20"
-        window.ollama_panel.connect_button.click()
-        wait_for(lambda: hosts)
-        assert hosts == ["http://192.168.1.20:11434"]
-        answer["text"] = "not an address"
-        window.ollama_panel.connect_button.click()
-        assert "is not an address" in errors[-1] and len(hosts) == 1
+        assert shown[0][0] == "http://127.0.0.1:11500"  # The current address is filled in
+        assert "Ollama at http://192.168.1.30:11434 could not be reached: nothing accepted the connection there." in shown[0][1][0]
+        assert hosts == ["http://192.168.1.20:11434"] and errors == []  # Switched once it answered
+        typed = ["192.168.1.40"]
+        window.ollama_panel.connect_button.click()  # Fails, then cancelled: nothing changes
+        assert len(hosts) == 1 and "could not be reached" in shown[1][1][0]
         window.session = fake_session("http://192.168.1.20:11434")
         window._ollama_state = State(True)
         window._show_ollama()
@@ -630,7 +658,7 @@ def test_connect_switches_only_to_a_server_that_answers_and_disconnect_comes_bac
         assert hosts[-1] == "http://127.0.0.1:11500"  # This computer's address of before, not the default
         window.session.running = True
         window.ollama_panel.connect_button.click()
-        assert "Stop the model" in errors[-1] and len(typed) == 3
+        assert "Stop the model" in errors[-1] and len(shown) == 2
     finally:
         window.session = None
         window.close()

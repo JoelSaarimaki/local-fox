@@ -222,7 +222,8 @@ Local Fox starts by asking for the project, before the window opens:
   a reply in progress fails, and an `ollama pull` continues where it was when run again.
   **Connect to Ollama server**, below them, asks for the address of an Ollama server that already runs, e.g. on
   another computer (the current address is filled in), and uses it if Ollama answers there, as `/host` does: the
-  conversation stays, and the address is saved as `ollama_host`. While the address is another computer's, the
+  conversation stays, and the address is saved as `ollama_host`. If Ollama does not answer, the dialog stays open
+  and says why, so that the address can be corrected. While the address is another computer's, the
   panel has **Disconnect** instead of the stop button, which goes back to this computer's Ollama (the last address
   of this computer used, or the default) and leaves the other computer's server running.
 - **Add path to allowed**, **Add path to read-only** and **Add path to forbidden** in the filemap's menu add the

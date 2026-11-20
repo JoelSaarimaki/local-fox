@@ -120,14 +120,12 @@ class OllamaPanel(QFrame):
         layout.addWidget(_button_page(self.connect_button))
 
     def show_state(self, host: str, text: str, can_start: bool, tip: str = "", can_stop: bool = False,
-                   model: str = "", placement: str = "", model_tip: str = "", remote: bool = False,
-                   connecting: bool = False) -> None:
+                   model: str = "", placement: str = "", model_tip: str = "", remote: bool = False) -> None:
         """
         Shows the address, the model and where it runs, the text of what the server does, and the start button when
         the server can be started here, the stop button when one of this computer runs (never both: one that
         answers is not started), or the disconnect button when the address is another computer's (remote). The
-        connect button says "Connecting…" while an address given to it is checked. The text is never orange: a
-        server that is not running has the start button below it, which draws the eye enough.
+        text is never orange: a server that is not running has the start button below it, which draws the eye enough.
         """
         self.host_label.set_full_text(host.removeprefix("http://"), host)
         self.model_label.set_full_text(model, model_tip)
@@ -141,5 +139,3 @@ class OllamaPanel(QFrame):
         self.disconnect_button.setVisible(remote)
         page = 3 if remote else 1 if can_start else 2 if can_stop else 0
         self._buttons.setCurrentIndex(page)
-        self.connect_button.setText("Connecting…" if connecting else "Connect to Ollama server")
-        self.connect_button.setEnabled(not connecting)

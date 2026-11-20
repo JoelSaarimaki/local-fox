@@ -4,6 +4,13 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.6 (2026-11-20)
+
+- **"Connect to Ollama server" has a dialog of its own**, narrower than before, which checks the address while it
+  stays open ("Connecting to …") and closes only when Ollama answers there. If it does not, the dialog says why
+  below the address, so that it can be corrected and tried again; before, the dialog closed and the error went to
+  the feed, where it was easy to miss.
+
 ## 1.1.5 (2026-11-20)
 
 - **"Connect to Ollama server"** in the Ollama panel asks for the address of an Ollama server that already runs,

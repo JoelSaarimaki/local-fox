@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QEvent, QFileSystemWatcher, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QFont, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton,
+from PySide6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QSplitter, QToolTip,
                                QToolButton, QVBoxLayout, QWidget)
 
@@ -27,6 +27,7 @@ from .bridge import AsyncRunner, Bridge, QtFrontend
 from .document_view import DocumentTabs
 from .feed import Feed
 from .filemap_view import FilemapView
+from .connect_dialog import ConnectDialog
 from .ollama_panel import OllamaPanel
 from .project_dialog import choose_project
 from .prompt import PromptInput
@@ -94,7 +95,6 @@ class MainWindow(QMainWindow):
         self._serve = None               # The 'ollama serve' Local Fox started on the user's click, stopped at the close
         self._serve_started = 0.0        # When it was started, while it has not answered yet (0 when it has)
         self._serve_host = ""            # The address it serves
-        self._connecting = ""            # An address "Connect to Ollama server" is checking
         # The address of this computer's Ollama that "Disconnect" goes back to: the last one used in this run
         self._local_host = settings["ollama_host"] if ollama_server.is_local(settings["ollama_host"]) else config_module.DEFAULTS["ollama_host"]
         self.setWindowTitle(APP_NAME)
@@ -475,7 +475,7 @@ class MainWindow(QMainWindow):
         self.ollama_panel.show_state(host, text, tip=tip,
                                      can_start=down and not own and local, can_stop=own or (answers and local),
                                      model=model, placement=ollama_server.placement(state, model), model_tip=model_tip,
-                                     remote=not local, connecting=bool(self._connecting))
+                                     remote=not local)
         self._pace_polls()
 
     def _pace_polls(self) -> None:
@@ -549,7 +549,8 @@ class MainWindow(QMainWindow):
         """
         Asks for the address of an Ollama server that already runs, e.g. on another computer, on the user's click
         on "Connect to Ollama server", and talks to it from now on if it answers there, as /host does (the
-        conversation stays, the address is saved). One that does not answer is not switched to: the address stays.
+        conversation stays, the address is saved). The dialog checks it and says why one does not answer, and the
+        address stays as it was until one does.
         """
         session = self.session
         if not session:
@@ -558,38 +559,30 @@ class MainWindow(QMainWindow):
         if self._busy():
             self._local_error("Stop the model before connecting to another Ollama server.")
             return
-        text, ok = QInputDialog.getText(
-            self, "Connect to Ollama server",
-            "The address of an Ollama server that runs, e.g. 192.168.1.20 or 192.168.1.20:11434.\n"
-            "On another computer, its Ollama must listen on the network (OLLAMA_HOST=0.0.0.0 there).",
-            QLineEdit.Normal, session.config["ollama_host"])
-        if not ok or not text.strip():
-            return
-        host = ollama_server.normalize_host(text)
-        if not host:
-            self._local_error(f"{text.strip()} is not an address. Give it as e.g. 192.168.1.20, 192.168.1.20:11434 or "
-                              "http://192.168.1.20:11434.")
-            return
-        if host == session.config["ollama_host"]:
-            self._local_notice(f"Local Fox already uses the Ollama server at {host}.")
-            return
-        self._connecting = host
-        self._show_ollama()
+        dialog = ConnectDialog(self, session.config["ollama_host"], self._check_ollama_at)
+        if dialog.exec() == ConnectDialog.Accepted and dialog.host:
+            self._set_host(dialog.host)
+
+    def _check_ollama_at(self, host: str, done) -> None:
+        """
+        Checks that Ollama answers at host ('ollama list', which loads nothing), in the session's loop, and calls
+        done in the window's thread with None, or with why it did not answer.
+        """
         future = self.runner.submit(ollama_server.models_at(host))
 
-        def checked(f):
-            self._connecting = ""
-            self._show_ollama()  # "Connect to Ollama server" again
+        def finished(f):
             error = f.exception()
             if error is None:
-                self._set_host(host)
-                return
-            reason = "it did not answer in time" if isinstance(error, TimeoutError) else str(error) or type(error).__name__
-            self._local_error(f"Ollama at {host} could not be reached ({reason}), so Local Fox still uses "
-                              f"{session.config['ollama_host']}. Check that Ollama runs there and listens on the "
-                              "network (OLLAMA_HOST=0.0.0.0), and that its firewall lets port "
-                              f"{ollama_server.port_of(host)} in.")
-        future.add_done_callback(lambda f: self._later(lambda: checked(f)))
+                reason = None
+            elif isinstance(error, TimeoutError):
+                reason = f"it did not answer within {ollama_server.POLL_TIMEOUT} seconds"
+            elif isinstance(error, ConnectionError):
+                # The ollama client's own text only says to check that Ollama is installed and running
+                reason = "nothing accepted the connection there"
+            else:
+                reason = str(error) or type(error).__name__
+            self._later(lambda: done(reason))
+        future.add_done_callback(finished)
 
     def _disconnect_ollama(self) -> None:
         """

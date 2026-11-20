@@ -181,7 +181,7 @@ has been reported to loop there.
 | `local_fox/shell_path.py` | macOS: the login shell's PATH, added at the start |
 | `local_fox/config.py`, `export.py`, `cli.py` | Settings, Markdown export, the command line for testing the core |
 | `local_fox/__main__.py` | The entry point of the window and the executable; `--tools-server` runs the bundled tools instead |
-| `local_fox/ui/` | The window: `app.py` (the start), `project_dialog.py`, `main_window.py`, `settings_view.py`, `feed.py` + `render.py` (HTML), `filemap_view.py`, `document_view.py` (files opened from the filemap, in tabs beside the feed), `ollama_panel.py`, `prompt.py`, `bridge.py`, `theme.py` (the palette and stylesheets), `wheel_guard.py` (the wheel scrolls past dropdowns and number fields), `logo.py` (the fox and the icons) |
+| `local_fox/ui/` | The window: `app.py` (the start), `project_dialog.py`, `main_window.py`, `settings_view.py`, `feed.py` + `render.py` (HTML), `filemap_view.py`, `document_view.py` (files opened from the filemap, in tabs beside the feed), `ollama_panel.py`, `connect_dialog.py` (its "Connect to Ollama server"), `prompt.py`, `bridge.py`, `theme.py` (the palette and stylesheets), `wheel_guard.py` (the wheel scrolls past dropdowns and number fields), `logo.py` (the fox and the icons) |
 | `tools/compare.py` | Runs ollmcp-generic-tools' comparison scenarios through the core |
 | `packaging/local_fox.spec`, `build.ps1`, `build.sh` | The executable (Windows), the application (macOS, Linux) |
 | `tests/` | Unit tests with a fake Ollama client and fake MCP servers |
