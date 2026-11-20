@@ -475,7 +475,7 @@ class MainWindow(QMainWindow):
         self.ollama_panel.show_state(host, text, tip=tip,
                                      can_start=down and not own and local, can_stop=own or (answers and local),
                                      model=model, placement=ollama_server.placement(state, model), model_tip=model_tip,
-                                     remote=not local)
+                                     remote=not local, busy=self._busy())
         self._pace_polls()
 
     def _pace_polls(self) -> None:
@@ -796,6 +796,7 @@ class MainWindow(QMainWindow):
         if self.notice_bar.isVisible() and self._decision is None:
             self._hide_notice()
         self._turn = self._run(self.session.send(text))
+        self._show_ollama()  # Connecting greyed out at once, before the turn has started in the loop
         self.tabs.show_conversation()
         self.feed.scroll_to_bottom()
         return None
@@ -888,7 +889,7 @@ class MainWindow(QMainWindow):
         tools = [t.exposed for t in session.servers.tools] if session and session.servers else []
         # The session's model's largest context, for the context sizes offered if config.json names the same model
         known = {session.model: session.max_context} if session and session.max_context else {}
-        dialog = SettingsDialog(self, None, tools, self._project(), known)
+        dialog = SettingsDialog(self, None, tools, self._project(), known, refuse=self._settings_refused)
         dialog.open_folder.connect(self._open_config)
         dialog.saved.connect(self._settings_saved)
         dialog.models_wanted.connect(lambda host: self._list_models_for(dialog, host))
@@ -907,6 +908,23 @@ class MainWindow(QMainWindow):
             text = "" if not error else "it did not answer in time" if isinstance(error, TimeoutError) else str(error) or type(error).__name__
             self._later(lambda: dialog.isVisible() and dialog.show_models(host, models, text))
         future.add_done_callback(finished)
+
+    def _settings_refused(self, settings: dict) -> str | None:
+        """
+        Returns why the settings view's plain "Save" cannot apply the settings now, or None: the Ollama address
+        and the model apply at once, which the session refuses while a turn runs. Saved anyway, config.json and the
+        session would disagree until the next clear, so nothing is saved then. "Save and clear" stops the turn first.
+        """
+        session = self.session
+        if not session or not self._busy():
+            return None
+        changed = [what for what, differs in (("the Ollama address", ollama_server.normalize_host(settings["ollama_host"])
+                                               != session.config["ollama_host"]),
+                                              ("the model", settings["model"] != session.model)) if differs]
+        if not changed:
+            return None
+        return (f"The model is running, so {' and '.join(changed)} cannot change now. Stop the model first, or choose "
+                "\"Save and clear\", which stops it.")
 
     def _settings_saved(self, settings: dict, clear: bool, tools_changed: bool) -> None:
         self.filemap.full_paths = settings.get("prompt_full_paths", False)

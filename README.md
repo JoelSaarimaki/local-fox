@@ -225,7 +225,8 @@ Local Fox starts by asking for the project, before the window opens:
   conversation stays, and the address is saved as `ollama_host`. If Ollama does not answer, the dialog stays open
   and says why, so that the address can be corrected. While the address is another computer's, the
   panel has **Disconnect** instead of the stop button, which goes back to this computer's Ollama (the last address
-  of this computer used, or the default) and leaves the other computer's server running.
+  of this computer used, or the default) and leaves the other computer's server running. Both are greyed out while
+  the model runs, as its requests go to the server it started with.
 - **Add path to allowed**, **Add path to read-only** and **Add path to forbidden** in the filemap's menu add the
   path to `allowed_paths` (inside a forbidden folder),
   `read_only_files` or `forbidden_paths` of the project's tools config, or remove it from there. Only you make

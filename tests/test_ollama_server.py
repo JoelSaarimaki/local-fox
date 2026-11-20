@@ -676,3 +676,63 @@ def test_connect_switches_only_to_a_server_that_answers_and_disconnect_comes_bac
     finally:
         window.session = None
         window.close()
+
+def test_connecting_and_disconnecting_are_greyed_out_while_the_model_runs(app):
+    from local_fox.ui.main_window import MainWindow
+    from local_fox.ui.ollama_panel import BUSY_TIP, CONNECT_TIP, DISCONNECT_TIP
+    window = MainWindow(dict(config.DEFAULTS))
+    panel = window.ollama_panel
+    try:
+        window.session = fake_session("http://192.168.1.20:11434")
+        window._ollama_state = State(True)
+        window._show_ollama()
+        assert panel.connect_button.isEnabled() and panel.disconnect_button.isEnabled()
+        assert panel.connect_button.toolTip() == CONNECT_TIP and panel.disconnect_button.toolTip() == DISCONNECT_TIP
+        window.session.running = True
+        window._show_ollama()
+        assert not panel.connect_button.isEnabled() and not panel.disconnect_button.isEnabled()
+        assert panel.connect_button.toolTip() == BUSY_TIP == panel.disconnect_button.toolTip()
+        window.session.running = False
+        window._show_ollama()
+        assert panel.connect_button.isEnabled() and panel.connect_button.toolTip() == CONNECT_TIP
+    finally:
+        window.session = None
+        window.close()
+
+def test_a_plain_save_of_another_address_or_model_is_refused_while_the_model_runs(app, tmp_path, monkeypatch):
+    import json
+
+    from local_fox.ui.main_window import MainWindow
+    from local_fox.ui.settings_view import SettingsDialog
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("LOCAL_FOX_CONFIG", str(path))
+    config.save(dict(config.DEFAULTS), path)
+    window = MainWindow(dict(config.DEFAULTS))
+    saved = []
+    try:
+        window.session = fake_session()
+        window.session.running = True
+        dialog = SettingsDialog(None, refuse=window._settings_refused)
+        dialog.saved.connect(lambda settings, clear, tools: saved.append(clear))
+        dialog.app_form.fields["ollama_host"].setText("192.168.1.20")
+        dialog.app_form.fields["model"].setCurrentText("llama3.1")
+        dialog._save(False)
+        assert dialog.error.text() == ("Not saved: The model is running, so the Ollama address and the model cannot change "
+                                       "now. Stop the model first, or choose \"Save and clear\", which stops it.")
+        assert saved == [] and json.loads(path.read_text(encoding="utf-8"))["ollama_host"] == config.DEFAULTS["ollama_host"]
+        # Other settings save as before; "Save and clear" stops the turn, so it is never refused
+        dialog.app_form.fields["ollama_host"].setText(config.DEFAULTS["ollama_host"])
+        dialog.app_form.fields["model"].setCurrentText(config.DEFAULTS["model"])
+        dialog.app_form.fields["seed"].setText("7")
+        dialog._save(False)
+        assert saved == [False] and json.loads(path.read_text(encoding="utf-8"))["seed"] == 7
+        dialog = SettingsDialog(None, refuse=window._settings_refused)
+        dialog.saved.connect(lambda settings, clear, tools: saved.append(clear))
+        dialog.app_form.fields["ollama_host"].setText("192.168.1.20")
+        dialog._save(True)
+        assert saved == [False, True] and json.loads(path.read_text(encoding="utf-8"))["ollama_host"] == "http://192.168.1.20:11434"
+        window.session.running = False
+        assert window._settings_refused({**config.DEFAULTS, "ollama_host": "192.168.1.30"}) is None
+    finally:
+        window.session = None
+        window.close()

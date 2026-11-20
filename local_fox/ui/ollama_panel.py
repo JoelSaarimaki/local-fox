@@ -57,6 +57,11 @@ def _button_page(button: QPushButton) -> QWidget:
     row.addStretch(1)
     return page
 
+CONNECT_TIP = "Use an Ollama server that already runs, e.g. on another computer, by its address"
+DISCONNECT_TIP = "Use the Ollama server of this computer again; the other computer's server keeps running"
+# Shown on both while a turn runs, when they are greyed out
+BUSY_TIP = "Stop the model first: the model is running on this server"
+
 class OllamaPanel(QFrame):
     start_clicked = Signal()
     stop_clicked = Signal()
@@ -96,11 +101,11 @@ class OllamaPanel(QFrame):
         self.stop_button.clicked.connect(lambda checked=False: self.stop_clicked.emit())
         self.disconnect_button = QPushButton("Disconnect")
         self.disconnect_button.setCursor(Qt.PointingHandCursor)
-        self.disconnect_button.setToolTip("Use the Ollama server of this computer again; the other computer's server keeps running")
+        self.disconnect_button.setToolTip(DISCONNECT_TIP)
         self.disconnect_button.clicked.connect(lambda checked=False: self.disconnect_clicked.emit())
         self.connect_button = QPushButton("Connect to Ollama server")
         self.connect_button.setCursor(Qt.PointingHandCursor)
-        self.connect_button.setToolTip("Use an Ollama server that already runs, e.g. on another computer, by its address")
+        self.connect_button.setToolTip(CONNECT_TIP)
         self.connect_button.clicked.connect(lambda checked=False: self.connect_clicked.emit())
         # A stacked layout is as high as its highest page, so the row keeps the buttons' height also when empty
         self._buttons = QStackedLayout()
@@ -120,12 +125,15 @@ class OllamaPanel(QFrame):
         layout.addWidget(_button_page(self.connect_button))
 
     def show_state(self, host: str, text: str, can_start: bool, tip: str = "", can_stop: bool = False,
-                   model: str = "", placement: str = "", model_tip: str = "", remote: bool = False) -> None:
+                   model: str = "", placement: str = "", model_tip: str = "", remote: bool = False,
+                   busy: bool = False) -> None:
         """
         Shows the address, the model and where it runs, the text of what the server does, and the start button when
         the server can be started here, the stop button when one of this computer runs (never both: one that
-        answers is not started), or the disconnect button when the address is another computer's (remote). The
-        text is never orange: a server that is not running has the start button below it, which draws the eye enough.
+        answers is not started), or the disconnect button when the address is another computer's (remote). While a
+        turn runs (busy), connecting and disconnecting are greyed out, with the reason in their tooltips: the turn's
+        requests go to the server it started with. The text is never orange: a server that is not running has the
+        start button below it, which draws the eye enough.
         """
         self.host_label.set_full_text(host.removeprefix("http://"), host)
         self.model_label.set_full_text(model, model_tip)
@@ -139,3 +147,6 @@ class OllamaPanel(QFrame):
         self.disconnect_button.setVisible(remote)
         page = 3 if remote else 1 if can_start else 2 if can_stop else 0
         self._buttons.setCurrentIndex(page)
+        for button, tip in ((self.connect_button, CONNECT_TIP), (self.disconnect_button, DISCONNECT_TIP)):
+            button.setEnabled(not busy)
+            button.setToolTip(BUSY_TIP if busy else tip)

@@ -463,9 +463,11 @@ class SettingsDialog(QDialog):
     models_wanted = Signal(str)
 
     def __init__(self, parent, models: list[str] | None = None, tools: list[str] | None = None, project: Path | None = None,
-                 max_contexts: dict[str, int] | None = None):
+                 max_contexts: dict[str, int] | None = None, refuse=None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
+        # refuse(settings) returns why a plain "Save" cannot apply them now (the window's _settings_refused), or None
+        self.refuse = refuse
         self.resize(820, 760)
         path = config_module.config_path()
         values, problem = dict(config_module.DEFAULTS), ""
@@ -550,6 +552,9 @@ class SettingsDialog(QDialog):
                 raise SettingsError(f"ollama_host: '{app_values['ollama_host']}' is not an address. Give it as e.g. "
                                     "192.168.1.20, 192.168.1.20:11434 or http://192.168.1.20:11434.")
             app_values["ollama_host"] = host
+            refused = None if clear or not self.refuse else self.refuse(app_values)
+            if refused:
+                raise SettingsError(refused)
             config_module.validate(app_values, "The settings")
             tools_values = self.tools_form.values() if self.tools_form and self.tools_form.changed() else None
             if tools_values is not None:

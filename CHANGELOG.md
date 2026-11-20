@@ -4,6 +4,14 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.8 (2026-11-20)
+
+- "Connect to Ollama server" and "Disconnect" are greyed out while the model runs, with the reason in their
+  tooltips, instead of reporting it in the feed after the click.
+- The settings view's "Save" no longer writes an Ollama address or model that the running session cannot take:
+  it says "Not saved" and why, so `config.json` and the session never disagree. "Save and clear" stops the model
+  and applies them as before.
+
 ## 1.1.7 (2026-11-20)
 
 - "Connect to Ollama server" checks the address in use too, instead of only saying that Local Fox already uses
