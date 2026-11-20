@@ -320,7 +320,7 @@ Unlike the export, the log is written without asking and holds what the feed doe
 | `reply` | The reply, thinking and tool calls as the model made them, why it stopped (`repeating` when Local Fox stopped a loop), the token counts and the durations |
 | `tool` | A call by the name the model used, the tool that ran, the arguments, status, response and duration |
 | `made_room` | Tool responses shortened or replaced with a note to fit the context: which, how many tokens, and the estimate after |
-| `context_note` | The note added to a tool response when the context fills or room was made |
+| `context_note` | The note added to a tool response when room was made in the context |
 | `same_failures` | The turn ended because the model made the same tool call three times and it failed the same way each time |
 | `cut` | Ollama's count of a request dropped without a removal, in a request that could have overflowed the context: it cut the conversation, and the turn stopped |
 | `smaller_count` | Ollama's count dropped in a request far from filling the context: not a cut, but the model's chat template counting less (llama3.1 sends the tool definitions only with your message) |
@@ -410,11 +410,9 @@ model goes on without knowing its task. Local Fox keeps that from happening:
   path in the project or its full path, as "Add path to prompt" writes it): you named them for the model to know.
   If even those have to go, the feed says so. Your messages, the model's replies and the latest step's tool
   responses always stay, so the model keeps its task and can read a file again.
-- **The model is told when its context fills**: at 85 % of the room, and whenever room was made, a note at the end
-  of the newest tool response tells it not to read again what it has read, and to use what it has found: answer now,
-  save the plan now, or make the change now (reading only the part it edits) and finish the steps it started, before reading
-  more. The note is part of the response the feed shows. Models that read until the context is full otherwise keep
-  their findings only in the responses that are removed next.
+- **The model is told when room was made**: a note at the end of the newest tool response says what was shortened
+  or replaced, so it knows why older responses changed. It only says what happened and gives no instructions. The note
+  is part of the response the feed shows.
 - **If it still does not fit**, the request is not sent, and the feed offers **Clear**, **Export** and **Larger
   context**.
 - **If the model keeps reading again what was removed or shortened** (three such calls in one turn), Local Fox asks whether to

@@ -582,7 +582,7 @@ def test_a_cut_by_ollama_stops_the_turn(tmp_path):
     # The read added about 5 000 tokens by the estimate, which fit the budget; the count before and that, with the
     # estimate's error, reach the context size, so a smaller count than before is Ollama's cut
     session.client = CountingClient([read("a.py"), read("b.py"), [chunk("Done.", done=True)]], counts=[None, 200])
-    big_reads(session, mcp, size=16000)
+    big_reads(session, mcp, size=17000)
     asyncio.run(session.send("Read"))
     assert any(e.kind == c.ERROR and "Ollama dropped the beginning of the conversation" in e.text for e in session.entries)
     assert tool_messages(session)[-1] == STOPPED_BEFORE  # The call of the cut reply is answered, not run
@@ -645,20 +645,21 @@ def run_reads(tmp_path, num_ctx, names="abcdef"):
     asyncio.run(session.send("Read the files"))
     return session
 
-def test_the_model_is_told_when_the_context_is_filling(tmp_path):
+def test_a_filling_context_gets_no_note_before_room_is_made(tmp_path):
+    # Near full but fitting: the model is not told to hurry (the warning at 85 % was removed in 1.1.9)
     session = run_reads(tmp_path, 8750)
-    noted = [e for e in session.entries if e.kind == c.TOOL and "[Local Fox: " in e.response]
-    assert len(noted) == 1 and not any(e.removed for e in session.entries)  # Once per fill, before room is needed
-    assert "If you are implementing, make the change now" in noted[0].response
-    assert tool_messages(session)[-1] == noted[0].response  # The model gets what the feed shows
-    assert '"context_note"' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
+    assert not any(e.removed or e.shortened for e in session.entries)
+    assert not any("[Local Fox: " in e.response for e in session.entries if e.kind == c.TOOL)
 
 def test_the_model_is_told_when_room_was_made(tmp_path):
-    # One step can fill the rest of the context at once: making room tells the model too
     session = run_reads(tmp_path, 8250)
     full = [e for e in session.entries if e.kind == c.TOOL and "the context was full, so " in e.response]
     assert full and any(e.removed for e in session.entries)
     assert not full[-1].removed  # On the newest response, which the model reads next
+    note = full[-1].response.rsplit("[Local Fox: ", 1)[1]
+    assert note.endswith(".]") and "now" not in note and "Do not" not in note  # What happened, no instruction
+    assert full[-1].response in tool_messages(session)  # The model gets what the feed shows
+    assert '"context_note"' in (tmp_path / "logs" / "session.jsonl").read_text(encoding="utf-8")
 
 def code_reads(mcp, functions=12):
     """Makes every read return a whole Python file of functions named after the file: a_0, a_1, ..."""

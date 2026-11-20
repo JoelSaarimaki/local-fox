@@ -49,21 +49,13 @@ REPLY_ROOM_FACTOR = 1.5
 # The re-reads of removed responses in one turn after which the user is asked whether to go on: the model reading
 # again what was removed for room, which fills the context and removes the next, is a loop without progress.
 REREADS_TO_ASK = 3
-# The share of the context's budget at which the model is told that the context is filling, once per fill: above
-# ROOM_TARGET, so that the warning comes again only after room was made and the conversation grew back. A model that
-# keeps reading until the context is full then has its findings only in responses about to be removed. One step can
-# add more than the rest of the room (several whole files), so making room tells the model too (ROOM_MADE_NOTE).
-WARN_AT = 0.85
-# The notes name what to do in each mode of the instructions template: "write down what you have found" alone read
-# as taking notes, and gave an implementing model no reason to make the change before reading more.
-USE_WHAT_YOU_FOUND = ("Do not read again what you have already read. If you are answering, answer now with what you know. "
-                      "If you are planning, save the plan now. If you are implementing, make the change now, reading only "
-                      "the part you edit, and finish the steps you started.")
-CONTEXT_WARNING = ("\n\n[Local Fox: this conversation now uses about {used} of the {budget} tokens the context allows, and "
-                   "older tool responses will soon be removed to make room. " + USE_WHAT_YOU_FOUND + "]")
-# {what}: "3 older tool responses were shortened to the parts mentioned lately and the responses of 2 older tool calls
-# were replaced with notes", or one of the two
-ROOM_MADE_NOTE = "\n\n[Local Fox: the context was full, so {what}. " + USE_WHAT_YOU_FOUND + "]"
+# What the model is told when room was made, at the end of the newest tool response, so that it knows why older
+# responses changed. It says only what happened: an earlier warning at 85 % and an instruction to answer, save the plan
+# or make the change now were added for flint:40b, which read until the context was full; with responses shortened to
+# what was mentioned since, the instruction came after the loss it was meant to prevent and only hurried the model
+# (removed in 1.1.9). {what}: "3 older tool responses were shortened to the parts mentioned lately and the responses
+# of 2 older tool calls were replaced with notes", or one of the two
+ROOM_MADE_NOTE = "\n\n[Local Fox: the context was full, so {what}.]"
 CUT_OFF_MARK = "\n\n[This reply was cut off here: the context was full.]"
 # How far the estimate of what was added to a request may be too low (Session._counted): a smaller count is taken as
 # Ollama's cut only if the count before and this many times the estimate of what was added reach the context size.
@@ -165,7 +157,6 @@ class Session:
         self._request_chars = 0
         self._made_room = False
         self._rereads = 0  # Calls in this turn of tools whose responses were removed to make room (_ask_about_rereads)
-        self._warned = False  # Whether the model was told that the context is filling, since room was last made
         self._cut_by_ollama = False
 
     # --- Entries ---
@@ -344,7 +335,6 @@ class Session:
         """
         self.entries, self.messages = [], []
         self._latest = {}
-        self._warned = False
         self._last_prompt_tokens = self._last_request_chars = self._longest_reply = 0
         self.saved_path, self._created = None, None
         self.allow_all = False
@@ -780,11 +770,7 @@ class Session:
         """
         budget = self.num_ctx - self._reply_room()
         if self._estimate() <= budget:
-            if self._estimate() > budget * WARN_AT and not self._warned:
-                self._note_to_model(CONTEXT_WARNING.format(used=format_number(self._estimate()), budget=format_number(budget)))
-                self._warned = True
             return True
-        self._warned = False  # Room is made below: the next fill gets a warning of its own
         room_goal = int(budget * ROOM_TARGET)
         tool_indexes = [i for i, m in enumerate(self.messages) if m.get("role") == "tool"]
         last_reply = max((i for i, m in enumerate(self.messages) if m.get("role") == "assistant"), default=-1)
@@ -943,10 +929,9 @@ class Session:
 
     def _note_to_model(self, note: str) -> None:
         """
-        Tells the model about its context (filling, or room made) at the end of the newest tool response, which it
-        reads next: to use what it has found (answer, save the plan, or make the change) before reading more, as older
-        responses are or will be removed. The note is in the response the feed shows, and in the log. A message of the
-        user is never changed: when the newest message is theirs, the model gets no note.
+        Tells the model that room was made in its context, at the end of the newest tool response, which it reads
+        next: appending there keeps Ollama's cached prompt. The note is in the response the feed shows, and in the
+        log. A message of the user is never changed: when the newest message is theirs, the model gets no note.
         """
         if not self.messages or self.messages[-1].get("role") != "tool":
             return

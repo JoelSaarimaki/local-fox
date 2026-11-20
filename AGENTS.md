@@ -103,9 +103,10 @@ has been reported to loop there.
   made down to `ROOM_TARGET` (three quarters) of the budget: every removal makes Ollama process the whole prompt again
   (2 to 3 minutes for 55 000 tokens on the CPU), so it must be seldom. After `REREADS_TO_ASK` calls in one turn
   that repeat a removed or shortened call (`conversation.same_call`), the user is asked (`_ask_about_rereads`). The model is told
-  that its context fills (`_note_to_model`: `CONTEXT_WARNING` once per fill at `WARN_AT`, `ROOM_MADE_NOTE` whenever
-  room is made, as one step can fill the rest at once), at the end of the newest tool response and of its entry, never
-  in a message of the user; appending at the end keeps Ollama's cached prompt. They are marked in
+  when room was made (`_note_to_model`, `ROOM_MADE_NOTE`: only what happened), at the end of the newest tool response
+  and of its entry, never in a message of the user; appending at the end keeps Ollama's cached prompt. A warning at 85 %
+  and an instruction to answer, save the plan or make the change now were removed in 1.1.9: added for flint:40b, they
+  came after the loss they were meant to prevent and only hurried the model. Don't bring them back without asking. They are marked in
   the feed (`Entry.removed`, `Entry.shortened`, which holds the shortened response the model has).
   The order comes from the calls, never from the model: don't add a tool for the model to flag what it needs (it
   costs definitions on every request, and the small models judge it poorly). If it still does not fit, it is not sent; and a drop in

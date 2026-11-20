@@ -4,6 +4,12 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+## 1.1.9 (2026-11-20)
+
+- The model is no longer told to "answer now", save the plan or make the change when its context fills. The warning
+  at 85 % is gone, and the note after room was made says only what was shortened or replaced. The instruction was
+  added for flint:40b, and it came after older responses had already been shortened.
+
 ## 1.1.8 (2026-11-20)
 
 - "Connect to Ollama server" and "Disconnect" are greyed out while the model runs, with the reason in their
