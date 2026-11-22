@@ -63,13 +63,13 @@ python3 -m venv .venv
 On Windows:
 
 ```powershell
-.venv\Scripts\python -m local_fox
+.venv\Scripts\python -m local_fox <path\to\project\folder>
 ```
 
 On MacOS and Linux:
 
 ```sh
-.venv/bin/python -m local_fox
+.venv/bin/python -m local_fox <path/to/project/folder>
 ```
 
 ## Building the executable
