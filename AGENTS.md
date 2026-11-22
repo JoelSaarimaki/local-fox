@@ -293,7 +293,7 @@ has been reported to loop there.
   saying what it does and why; comments for the reasons that are not obvious.
 - Keep the palette in `ui/theme.py`; every color in the window and the feed is one of its constants.
 - Add a unit test in `tests/` for session behaviour changes (`tests/test_session.py` has the fakes).
-- The project is a git repository (`main`). Commit when asked; build output (`build/`, `dist/`), `.venv` and `runs/` are
+- The project is a git repository: work on `dev`, releases on `main` (see "Versions"). Commit when asked; build output (`build/`, `dist/`), `.venv` and `runs/` are
   ignored, and `packaging/local_fox.spec` is kept although the `.gitignore` template ignores `*.spec`.
 
 ## Versions
@@ -306,11 +306,23 @@ has been reported to loop there.
   the user says so; a **major** one (2.0.0) only when something users or projects rely on breaks: a setting
   removed or renamed (unknown keys are an error on load), saved conversations or set-up projects no longer
   readable, a principle above given up.
-- Not every commit is a release. Raise the patch version without asking when user-facing changes are ready to
-  build (the user decides the minor and major versions); record it in `CHANGELOG.md` (a heading `## x.y.z (date)`
-  with what changed for users; a test checks the current version has one), commit, and tag the commit `vx.y.z`.
-  The user pushes, tags included. Don't release with changes of ollmcp-generic-tools that the user has not
-  committed there yet: the executable bundles the tools from that working tree.
+- **Branches**: work is committed on `dev` (several people contribute; theirs come in by pull requests into `dev`).
+  `main` gets nothing but releases: it only ever fast-forwards to `dev` at a release, so every commit of `main` that
+  is tagged is a version, and no commit is made on `main` directly (a fix of a release also goes through `dev`).
+- **Between releases**, a change for users adds its lines under `## Unreleased` at the top of `CHANGELOG.md` (add the
+  heading if it is not there). `__version__` is not changed on `dev`: it stays the last release's, so contributors
+  never conflict over it, and the window of a build from `dev` shows the release it is based on.
+- **A release** is made when the user asks for one (merging `dev` into `main`), not after every change:
+  1. On `dev`, pull first, so the release includes the others' merged work.
+  2. Choose the number from the `Unreleased` entries: a **patch** for fixes and small features, a **minor** or
+     **major** one only when the user says so (see above). Propose it, with the reason, if it is not obvious.
+  3. One release commit on `dev`: `__version__` raised, `## Unreleased` renamed `## x.y.z (date)` (a test checks
+     the current version has such a heading), message `Version x.y.z: <what changed>`.
+  4. `git checkout main`, `git merge --ff-only dev`, `git tag vx.y.z`, `git checkout dev`. If the fast-forward
+     fails, `main` has a commit that is not on `dev`: stop and tell the user, don't merge or rebase around it.
+  5. Build, unless the user has Local Fox open. The user pushes: `git push origin dev main --follow-tags`.
+- Don't release with changes of ollmcp-generic-tools that the user has not committed there yet: the executable
+  bundles the tools from that working tree.
 - There is no roadmap: development is not planned in versions, so don't add one (or planned versions to the
   changelog). The version only records what has been done.
 

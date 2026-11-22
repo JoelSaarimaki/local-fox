@@ -4,6 +4,9 @@ Local Fox follows [semantic versioning](https://semver.org/): a minor version fo
 version for fixes, small features and minor or invisible changes, and a major version only for changes that break what users or
 projects rely on (settings, saved conversations, set-up projects).
 
+Changes on the `dev` branch are listed under "Unreleased" at the top; a release (`dev` merged into `main`) gives
+them their version.
+
 ## 1.2.0 (2026-11-20)
 
 - The instructions template tells the model to read the project's `AGENTS.md`, if it has one, before planning or
