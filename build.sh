@@ -6,7 +6,7 @@
 #     ./build.sh [path to ollmcp-generic-tools]
 set -e
 cd "$(dirname "$0")"
-TOOLS_REPO="${1:-ollmcp-generic-tools}"
+TOOLS_REPO="${1:-./ollmcp-generic-tools}"
 PYTHON=.venv/bin/python
 if [ ! -x "$PYTHON" ]; then
     python3 -m venv .venv
