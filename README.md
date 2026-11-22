@@ -100,7 +100,9 @@ The folder `dist\LocalFox` is a portable application and can be moved anywhere.
 sh build.sh
 ```
 
-It builds `dist/LocalFox.app` on macOS and `dist/LocalFox/LocalFox` on Linux.
+It builds into `dist/`. On macOS it creates `dist/LocalFox.app`, which you start from the Finder or the Dock,
+and also `dist/LocalFox/LocalFox`, the same application unpacked, to run from a terminal. On Linux only
+`dist/LocalFox/LocalFox` is created.
 
 ### Additional notes for macOS and Linux
 
