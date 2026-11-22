@@ -321,6 +321,10 @@ has been reported to loop there.
   4. `git checkout main`, `git merge --ff-only dev`, `git tag vx.y.z`, `git checkout dev`. If the fast-forward
      fails, `main` has a commit that is not on `dev`: stop and tell the user, don't merge or rebase around it.
   5. Build, unless the user has Local Fox open. The user pushes: `git push origin dev main --follow-tags`.
+- **Without a release**, `main` may fast-forward to `dev` when the user asks, if nothing since the last release
+  changes the application (only these rules, other documents for contributors, tests): `CHANGELOG.md` has no
+  `## Unreleased` and `git diff vx.y.z dev -- local_fox packaging pyproject.toml` (the last release's tag) is empty.
+  The commit gets no tag, and `__version__` still describes the application.
 - Don't release with changes of ollmcp-generic-tools that the user has not committed there yet: the executable
   bundles the tools from that working tree.
 - There is no roadmap: development is not planned in versions, so don't add one (or planned versions to the
