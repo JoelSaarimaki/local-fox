@@ -9,7 +9,7 @@ git-ignored for such notes); read it before changing behaviour if it is there.
 Local Fox is a desktop harness for local models run with Ollama and the MCP tools of
 [ollmcp-generic-tools](ollmcp-generic-tools) (a submodule of this repository).
 It replaces ollmcp. It has a core without UI dependencies (`local_fox/`) and a PySide6 window (`local_fox/ui/`),
-packaged as a Windows executable with PyInstaller (and, untested, a macOS application bundle).
+packaged as a Windows executable with PyInstaller (and a macOS application bundle).
 
 The tools are **bundled, not copied**: the `ollmcp_tools` package is installed into `.venv` from the
 `ollmcp-generic-tools` submodule and packed into the executable. The tools stay developed in their own repository, which other MCP
@@ -192,7 +192,7 @@ it left the file hash out of edits before the tools stopped needing one (1.1.0).
 
 ## Environment and commands
 
-- **macOS has basic support, never run on a Mac**: `shell_path.py` (the login shell's PATH, as an application
+- **macOS has basic support**, run on a Mac by a contributor (its tests and the application, 2026-11): `shell_path.py` (the login shell's PATH, as an application
   started from the Finder gets only the system's), the config in `~/Library/Application Support`, Fusion style and
   Mac fonts (`ui/app.py`, `theme.FONT_FAMILIES`), `/Volumes/<disk>` and `~/Library` refused, `build.sh` and the spec's
   `BUNDLE` with an `.icns` from the logo (`logo.write_icns`). Keep new code portable: no Windows-only calls without a
@@ -233,7 +233,7 @@ it left the file hash out of edits before the tools stopped needing one (1.1.0).
   the `ollama serve` of "Start Ollama server", which the user should see and be able to stop: a console window of
   its own on Windows (`CREATE_NEW_CONSOLE`), Terminal on macOS and a terminal on Linux (`ollama_server.terminal_command`,
   followed by its port as `TerminalServer`, as the terminal runs it, not Local Fox); hidden with a log only without a terminal.
-  The macOS and Linux paths are tested only by simulation (`tests/test_macos.py`).
+  The unit tests simulate the macOS and Linux paths (`tests/test_macos.py`), so they run on any system.
 - **PyInstaller**: `collect_submodules("mcp")` must leave out `mcp.cli` (it calls `sys.exit` on import); `mcp.server`
   is needed by the bundled tools. The tools import their toolsets by name, so the spec collects `ollmcp_tools`'
   submodules, its data files (the setup templates), its metadata (the version in the feed) and the tree-sitter
