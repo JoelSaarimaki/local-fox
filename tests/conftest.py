@@ -12,8 +12,27 @@ the application frees exactly the widgets in its destructor, and deleting e.g. t
 application's own destructor crash.
 """
 import gc
+import os
 
 import pytest
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _scratch_config(tmp_path_factory):
+    """
+    Points LOCAL_FOX_CONFIG at a scratch file of the test run, so that running the tests needs no extra
+    configuration and never creates or changes the user's own config.json (nor the logs next to it). A value
+    set before the run is restored afterwards. Tests that need their own file still set the variable for their
+    own scope with monkeypatch, which overrides this one and restores it.
+    """
+    path = tmp_path_factory.mktemp("local-fox-data") / "config.json"
+    previous = os.environ.get("LOCAL_FOX_CONFIG")
+    os.environ["LOCAL_FOX_CONFIG"] = str(path)
+    yield path
+    if previous is None:
+        os.environ.pop("LOCAL_FOX_CONFIG", None)
+    else:
+        os.environ["LOCAL_FOX_CONFIG"] = previous
 
 
 @pytest.fixture(scope="session", autouse=True)

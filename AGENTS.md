@@ -200,8 +200,10 @@ it left the file hash out of edits before the tools stopped needing one (1.1.0).
 - Windows 11, Python 3.14. The project's own virtual environment is `.venv` (PySide6, ollama, mcp, markdown, pytest,
   pyinstaller, and ollmcp-tools with tree-sitter, installed non-editable from `.\ollmcp-generic-tools`). After
   changing the tools, reinstall them into `.venv` (the build scripts do it on every build) or the old copy runs.
-- Tests: `.venv\Scripts\python -m pytest`. Set `LOCAL_FOX_CONFIG` to a scratch file when running anything, so the
-  user's `%APPDATA%\LocalFox\config.json` is not created or changed. Don't build while the user has Local Fox open
+- Tests: `.venv\Scripts\python -m pytest`. The tests point `LOCAL_FOX_CONFIG` at a scratch file themselves
+  (`tests/conftest.py`), so they need no extra configuration; when running Local Fox itself for testing, set
+  `LOCAL_FOX_CONFIG` to a scratch file, so the user's `%APPDATA%\LocalFox\config.json` is not created or changed.
+  Don't build while the user has Local Fox open
   (check for the `LocalFox` process): the build replaces the running executable's files.
 - Command line: `.venv\Scripts\python -m local_fox.cli --project <folder> --yes "message"`.
 - Window: `.venv\Scripts\python -m local_fox [project]`. Build: `.\build.ps1` → `dist\LocalFox\LocalFox.exe`.
