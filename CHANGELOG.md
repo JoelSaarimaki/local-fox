@@ -14,6 +14,10 @@ them their version.
 - The tests no longer crash at their end on macOS (widgets are deleted before PySide6 shuts down).
 - The README says why qwen3.6:35b is the default model and what to know about it ("Choosing a model").
 - `tools/compare.py` says what to do when `--tools-repo` has no `local_ai_tests`, which a submodule clone lacks.
+- On macOS the help texts of the settings view are no longer clipped and sit at the same distance under their
+  field: the form is now a grid layout, which gives a wrapped help text the height it needs (a form layout did
+  not, cutting the first and last lines of a description of three lines or more), and the text is top-aligned
+  instead of centered.
 
 ## 1.2.0 (2026-11-20)
 
