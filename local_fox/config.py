@@ -51,7 +51,7 @@ DESCRIPTIONS = {
                   "model may get slower, the more so the more of it runs on the CPU. Changing it reloads the model. Also set for a session in the top bar or by /threads.",
     "think": "Thinking: empty turns it on for models that can think, true or false forces it, and a level such as "
              "low or high is passed on to models that take one.",
-    "temperature": "The model's temperature; empty uses the model's own. Avoid 0 with qwen3.6:35b: Qwen3.6 has been reported to loop there.",
+    "temperature": "The model's temperature; empty uses the model's own.",
     "seed": "A fixed seed for repeatable runs; empty for none.",
     "max_steps": "The model requests in one turn before Local Fox asks whether to continue; empty for no limit.",
     "auto_approve_tools": "Tools that run without asking for approval, separated by commas, e.g. read_file_with_metadata, get_outline.",

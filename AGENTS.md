@@ -27,8 +27,7 @@ the right mode in 14 of 14 runs, read the needed files first in 14 of 14, passed
 against flint's 25, and took 44 seconds a run against flint's 103 (results in ollmcp-generic-tools'
 local_ai_test_results.md). It is a mixture-of-experts model with about 3B of its 35B parameters active per token,
 so it is fast even mostly on the CPU. It checks the existing plans and reviews its diff less often than flint, and
-it left the file hash out of edits before the tools stopped needing one (1.1.0). Avoid temperature 0 with it: Qwen3.6
-has been reported to loop there.
+it left the file hash out of edits before the tools stopped needing one (1.1.0).
 
 `flint:40b` was the default before it; what follows is why Local Fox tolerates its calls by bare tool names.
 

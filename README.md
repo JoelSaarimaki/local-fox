@@ -24,11 +24,9 @@ Local Fox runs on Windows, MacOS and Linux.
 mode the request asked for (answering, planning or implementing) and read the files it needed first in 14 of 14
 runs, and its code passed every hidden test. It made 4 failed tool calls against flint:40b's 25, and took 44 seconds
 a run against flint's 103. It is a mixture-of-experts model that uses about 3B of its 35B parameters for each token,
-so it is fast even when most of it runs on the CPU, and it can see images (`read_image`). What to know about it:
-
-- **Leave `temperature` at the model's own** (empty): Qwen3.6 has been reported to loop at temperature 0.
-- It checks the existing plans and reviews its changes with the diff less often than flint:40b did. Asking for
-  those in your message helps when they matter.
+so it is fast even when most of it runs on the CPU, and it can see images (`read_image`). It
+checks the existing plans and reviews its changes with the diff less often than flint:40b did: asking for those in
+your message helps when they matter.
 
 Other models can be chosen in the model menu at any time; pull them first with `ollama pull`.
 `flint:40b`, the default before 1.1.0, does as well in the scenarios but is about twice as slow, thinks at length
@@ -340,7 +338,7 @@ that does not start with the new config shows its error in the feed.
 | `num_ctx` | `65536` | The context size sent with every request; a larger one needs more memory and can move more of the model to the CPU |
 | `num_thread` | `null` | The CPU threads Ollama runs the model with; `null`: auto, Ollama's own choice. Fewer use less of the CPU; the model may get slower. Also set for a session in the top bar or by `/threads` |
 | `think` | `null` | `null`: on for models that can think; `true`, `false` or a level such as `"high"` |
-| `temperature` | `null` | `null`: the model's own. Avoid 0 with `qwen3.6:35b`: Qwen3.6 has been reported to loop there |
+| `temperature` | `null` | `null`: the model's own |
 | `seed` | `null` | A fixed seed, for repeatable runs |
 | `max_steps` | `null` | Model requests per turn before asking whether to continue; `null` for no limit |
 | `auto_approve_tools` | `[]` | Tools that run without asking, e.g. `["read_file_with_metadata", "get_outline"]` |
