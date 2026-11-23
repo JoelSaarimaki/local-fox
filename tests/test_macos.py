@@ -104,6 +104,26 @@ def test_a_server_in_a_terminal_is_followed_by_its_port(monkeypatch):
     ollama_server.stop(server)
     assert signals == [(7, ollama_server.signal.SIGTERM)] and server.poll() == 0
 
+def test_the_font_list_starts_with_a_font_the_system_has(monkeypatch):
+    import importlib
+
+    from local_fox.ui import theme
+    real = sys.platform
+    try:
+        monkeypatch.setattr(sys, "platform", "darwin")
+        importlib.reload(theme)
+        assert theme.FONT_FAMILIES[:2] == ["SF Mono", "Menlo"]
+        assert "Cascadia Mono" not in theme.FONT_FAMILIES and "Consolas" not in theme.FONT_FAMILIES
+        monkeypatch.setattr(sys, "platform", "win32")
+        importlib.reload(theme)
+        assert theme.FONT_FAMILIES[:2] == ["Cascadia Mono", "Consolas"]
+        monkeypatch.setattr(sys, "platform", "linux")
+        importlib.reload(theme)
+        assert theme.FONT_FAMILIES[0] == "DejaVu Sans Mono"
+    finally:
+        monkeypatch.setattr(sys, "platform", real)
+        importlib.reload(theme)  # Leave the module as the running system has it
+
 def test_linux_finds_the_server_with_ss_when_lsof_is_missing(monkeypatch):
     from local_fox import ollama_server
     monkeypatch.setattr(sys, "platform", "linux")

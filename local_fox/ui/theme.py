@@ -1,6 +1,7 @@
 """
 The look of Local Fox: a dark console with a limited palette and a monospace font.
 """
+import sys
 # The palette: every color of the window and the feed is one of these
 BG = "#161616"         # Window and feed background
 PANEL = "#1d1d1d"      # Bars, the filemap and the input
@@ -16,8 +17,14 @@ EXPANDED = "#1c1c1c"   # The box of an expanded tool call, instructions, filemap
 OK = "#8fbf7f"
 ERROR = "#e06c6c"       # Removed lines of an edit; errors in the feed are ACCENT
 
-# Windows, then macOS (SF Mono with Xcode or Terminal, Menlo always), then Linux
-FONT_FAMILIES = ["Cascadia Mono", "Consolas", "SF Mono", "Menlo", "DejaVu Sans Mono", "Courier New"]
+# Font lists, different for MacOS, Windows and Linux.
+# Some of the fonts may be missing, for example SF Mono only comes with Xcode.
+if sys.platform == "darwin":
+    FONT_FAMILIES = ["SF Mono", "Menlo", "Courier New"]
+elif sys.platform == "win32":
+    FONT_FAMILIES = ["Cascadia Mono", "Consolas", "Courier New"]
+else:
+    FONT_FAMILIES = ["DejaVu Sans Mono", "Liberation Mono", "Courier New"]
 
 def stylesheet(font_size: int) -> str:
     """
