@@ -312,24 +312,28 @@ it left the file hash out of edits before the tools stopped needing one (1.1.0).
   removed or renamed (unknown keys are an error on load), saved conversations or set-up projects no longer
   readable, a principle above given up.
 - **Branches**: work is committed on `dev` (several people contribute; theirs come in by pull requests into `dev`).
-  `main` gets nothing but releases: it only ever fast-forwards to `dev` at a release, so every commit of `main` that
-  is tagged is a version, and no commit is made on `main` directly (a fix of a release also goes through `dev`).
+  `main` gets nothing but releases: it only ever fast-forwards to a commit of `dev`, pushed as `dev:main`, so every
+  commit of `main` that is tagged is a version, and no commit is made on `main` directly (a fix of a release also
+  goes through `dev`). There are no pull requests from `dev` to `main`: their merge commits would put on `main`
+  a commit that `dev` lacks. The local `main` branch is not used.
 - **Between releases**, a change for users adds its lines under `## Unreleased` at the top of `CHANGELOG.md` (add the
   heading if it is not there). `__version__` is not changed on `dev`: it stays the last release's, so contributors
   never conflict over it, and the window of a build from `dev` shows the release it is based on.
-- **A release** is made when the user asks for one (merging `dev` into `main`), not after every change:
-  1. On `dev`, pull first, so the release includes the others' merged work.
+- **A release** is made by the agent when the user asks for one, not after every change:
+  1. On `dev`, `git pull` first, so the release includes the others' merged work, and check that `main` can
+     fast-forward: `git fetch` and `git merge-base --is-ancestor origin/main dev`. If it fails, `main` has a commit
+     that `dev` lacks: stop and tell the user, don't merge or rebase around it.
   2. Choose the number from the `Unreleased` entries: a **patch** for fixes and small features, a **minor** or
      **major** one only when the user says so (see above). Propose it, with the reason, if it is not obvious.
   3. One release commit on `dev`: `__version__` raised, `## Unreleased` renamed `## x.y.z (date)` (a test checks
-     the current version has such a heading), message `Version x.y.z: <what changed>`.
-  4. `git checkout main`, `git merge --ff-only dev`, `git tag vx.y.z`, `git checkout dev`. If the fast-forward
-     fails, `main` has a commit that is not on `dev`: stop and tell the user, don't merge or rebase around it.
-  5. Build, unless the user has Local Fox open. The user pushes: `git push origin dev main --follow-tags`.
-- **Without a release**, `main` may fast-forward to `dev` when the user asks, if nothing since the last release
-  changes the application (only these rules, other documents for contributors, tests): `CHANGELOG.md` has no
-  `## Unreleased` and `git diff vx.y.z dev -- local_fox packaging pyproject.toml` (the last release's tag) is empty.
-  The commit gets no tag, and `__version__` still describes the application.
+     the current version has such a heading), message `Version x.y.z: <what changed>`. Tag it `vx.y.z`.
+  4. Build, unless the user has Local Fox open.
+  5. The user pushes: `git push origin dev dev:main --follow-tags`. Git refuses `dev:main` unless it is a
+     fast-forward, so nothing on `main` is overwritten; never suggest `--force` for it.
+- **Without a release**, `main` may move to `dev` the same way (untagged) when the user asks, if nothing since the
+  last release changes the application (only these rules, other documents for contributors, tests): `CHANGELOG.md`
+  has no `## Unreleased` and `git diff vx.y.z dev -- local_fox packaging pyproject.toml` (the last release's tag)
+  is empty. `__version__` then still describes the application.
 - Before a release, check the tools: `git submodule status` without `+` or `-` (the build bundles the submodule's
   working tree), and the pointer at the tools' commit the release should have. A tools change the user wants in it
   must be committed and pushed in the tools' repository first, and the pointer moved to it on `dev` (see above).
