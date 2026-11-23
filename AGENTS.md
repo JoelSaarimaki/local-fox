@@ -13,7 +13,11 @@ packaged as a Windows executable with PyInstaller (and, untested, a macOS applic
 
 The tools are **bundled, not copied**: the `ollmcp_tools` package is installed into `.venv` from the
 `ollmcp-generic-tools` submodule and packed into the executable. The tools stay developed in their own repository, which other MCP
-clients and its `local_ai_tests` use too; don't copy their code into this one. Changes to the tools belong there.
+clients and its `local_ai_tests` use too; don't copy their code into this one. Changes to the tools belong there:
+they are made and committed in a clone of the tools' repository, not in the submodule, and reach Local Fox when the
+submodule is moved to a pushed commit (`git submodule update --remote`, then commit the new pointer on `dev`).
+The submodule's checked-out commit is what `.venv` and the executable get; after a pull that moves the pointer,
+run `git submodule update --init` (`git submodule status` marks a checkout that differs with `+`, a missing one with `-`).
 
 ## The default model: qwen3.6:35b
 
@@ -327,8 +331,10 @@ has been reported to loop there.
   changes the application (only these rules, other documents for contributors, tests): `CHANGELOG.md` has no
   `## Unreleased` and `git diff vx.y.z dev -- local_fox packaging pyproject.toml` (the last release's tag) is empty.
   The commit gets no tag, and `__version__` still describes the application.
-- Don't release with changes of ollmcp-generic-tools that the user has not committed there yet: the executable
-  bundles the tools from that working tree.
+- Before a release, check the tools: `git submodule status` without `+` or `-` (the build bundles the submodule's
+  working tree), and the pointer at the tools' commit the release should have. A tools change the user wants in it
+  must be committed and pushed in the tools' repository first, and the pointer moved to it on `dev` (see above).
+  Note a moved pointer in the changelog when the tools' change is visible to users.
 - There is no roadmap: development is not planned in versions, so don't add one (or planned versions to the
   changelog). The version only records what has been done.
 

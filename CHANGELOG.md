@@ -7,6 +7,15 @@ projects rely on (settings, saved conversations, set-up projects).
 Changes on the `dev` branch are listed under "Unreleased" at the top; a release (`dev` merged into `main`) gives
 them their version.
 
+## Unreleased
+
+- **ollmcp-generic-tools is a submodule** of this repository (`git clone --recurse-submodules`), and the build
+  scripts and the install steps take the tools from it by default, instead of a folder beside `local-fox`.
+- The tests no longer crash at their end on macOS (widgets are deleted before PySide6 shuts down).
+- The help of the `temperature` setting says to avoid 0 with qwen3.6:35b, and the README says why it is the
+  default model and what to know about it ("Choosing a model").
+- `tools/compare.py` says what to do when `--tools-repo` has no `local_ai_tests`, which a submodule clone lacks.
+
 ## 1.2.0 (2026-11-20)
 
 - The instructions template tells the model to read the project's `AGENTS.md`, if it has one, before planning or

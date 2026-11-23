@@ -1,6 +1,6 @@
 # Local Fox
 
-A harness for local AI models run with Ollama (`qwen3.6:35b` by default, or e.g. `flint:40b`) and the MCP tools of
+A harness for local AI models run with Ollama (`qwen3.6:35b` by default, see [Choosing a model](#choosing-a-model)) and the MCP tools of
 [ollmcp-generic-tools](https://github.com/JoelSaarimaki/ollmcp-generic-tools). It replaces ollmcp; what it does
 differently is in "How a session goes to the model" below. What each version changed is in [CHANGELOG.md](CHANGELOG.md).
 
@@ -11,11 +11,29 @@ Local Fox runs on Windows, MacOS and Linux.
 ## Prerequisites
 
 - **Python** 3.11 or newer (Local Fox is developed with 3.14). [Installation instructions.](https://wiki.python.org/python/getting-started/BeginnersGuide/Download.html)
-- **Ollama** run locally or hosted on a remote machine. Default model `qwen3.6:35b` recommended as a starting point. Other models, such as `flint:40b` or `gemma4:26b`, can be chosen later in the model menu. [Installation instructions.](https://ollama.com/download) The model (about 22 GB) can be downloaded with:
+- **Ollama** run locally or hosted on a remote machine. [Installation instructions.](https://ollama.com/download) The default model, `qwen3.6:35b` (about 22 GB), can be downloaded with:
 
   ```powershell
   ollama pull qwen3.6:35b
   ```
+
+### Choosing a model
+
+**`qwen3.6:35b` is the default and the recommended model.** In the comparison scenarios run through Local Fox
+(`tools/compare.py`, see [Comparing models through Local Fox](#comparing-models-through-local-fox)) it worked in the
+mode the request asked for (answering, planning or implementing) and read the files it needed first in 14 of 14
+runs, and its code passed every hidden test. It made 4 failed tool calls against flint:40b's 25, and took 44 seconds
+a run against flint's 103. It is a mixture-of-experts model that uses about 3B of its 35B parameters for each token,
+so it is fast even when most of it runs on the CPU, and it can see images (`read_image`). What to know about it:
+
+- **Leave `temperature` at the model's own** (empty): Qwen3.6 has been reported to loop at temperature 0.
+- It checks the existing plans and reviews its changes with the diff less often than flint:40b did. Asking for
+  those in your message helps when they matter.
+
+Other models can be chosen in the model menu at any time; pull them first with `ollama pull`.
+`flint:40b`, the default before 1.1.0, does as well in the scenarios but is about twice as slow, thinks at length
+and cannot see images. `gemma4:26b` (18 GB) is smaller and can see images. Local Fox also runs calls that name a tool
+without its server's prefix, which some models do.
 
 ## Local development
 
@@ -322,7 +340,7 @@ that does not start with the new config shows its error in the feed.
 | `num_ctx` | `65536` | The context size sent with every request; a larger one needs more memory and can move more of the model to the CPU |
 | `num_thread` | `null` | The CPU threads Ollama runs the model with; `null`: auto, Ollama's own choice. Fewer use less of the CPU; the model may get slower. Also set for a session in the top bar or by `/threads` |
 | `think` | `null` | `null`: on for models that can think; `true`, `false` or a level such as `"high"` |
-| `temperature` | `null` | `null`: the model's own |
+| `temperature` | `null` | `null`: the model's own. Avoid 0 with `qwen3.6:35b`: Qwen3.6 has been reported to loop there |
 | `seed` | `null` | A fixed seed, for repeatable runs |
 | `max_steps` | `null` | Model requests per turn before asking whether to continue; `null` for no limit |
 | `auto_approve_tools` | `[]` | Tools that run without asking, e.g. `["read_file_with_metadata", "get_outline"]` |
@@ -504,8 +522,8 @@ core, with the checks and summary of its `compare_models.py`. Run it with the Py
 not have it: point `--tools-repo` at a full clone of ollmcp-generic-tools that does (the submodule is the default):
 
 ```bash
-python tools/compare.py --models flint:40b,gemma4:26b --seeds 1,2,3
-python tools/compare.py --models flint:40b --scenarios plan_new,implement_fix --tools-repo <full clone of ollmcp-generic-tools>
+python tools/compare.py --models qwen3.6:35b,gemma4:26b --seeds 1,2,3
+python tools/compare.py --models qwen3.6:35b --scenarios plan_new,implement_fix --tools-repo <full clone of ollmcp-generic-tools>
 ```
 
 The results go to `runs/compare/<time>/`. The differences from `compare_models.py` are those of Local Fox: the
