@@ -192,7 +192,7 @@ it left the file hash out of edits before the tools stopped needing one (1.1.0).
 
 ## Environment and commands
 
-- **macOS has basic support**, run on a Mac by a contributor (its tests and the application, 2026-11): `shell_path.py` (the login shell's PATH, as an application
+- **macOS has basic support**, tested on a Mac: `shell_path.py` (the login shell's PATH, as an application
   started from the Finder gets only the system's), the config in `~/Library/Application Support`, Fusion style and
   Mac fonts (`ui/app.py`, `theme.FONT_FAMILIES`), `/Volumes/<disk>` and `~/Library` refused, `build.sh` and the spec's
   `BUNDLE` with an `.icns` from the logo (`logo.write_icns`). Keep new code portable: no Windows-only calls without a
