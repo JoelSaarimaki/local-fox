@@ -6,86 +6,119 @@ differently is in "How a session goes to the model" below. What each version cha
 
 ![The Local Fox window: the project's files on the left, and on the right the conversation with flint:40b fixing a bug, with its tool calls, thinking and answer](docs/window.png)
 
-## Installing and running
+Local Fox runs on Windows, MacOS and Linux.
 
-Local Fox is built from its source into an executable that has the tools of ollmcp-generic-tools bundled in it:
-building needs Python and the tools' repository, the built executable needs neither. It is developed and tested
-on Windows; for macOS and Linux, see [On macOS and Linux](#on-macos-and-linux).
+## Prerequisites
 
-1.  **Install Ollama and the model.**
-    Download and install Ollama from [ollama.com](https://ollama.com/). It keeps running in the background, and
-    Local Fox finds it at `http://127.0.0.1:11434`. Then download the default model, qwen3.6:35b (about 22 GB):
-    ```powershell
-    ollama pull qwen3.6:35b
-    ```
-    Other models, such as `flint:40b` or `gemma4:26b`, can be chosen later in the model menu; pull them the same way.
+- **Python** 3.11 or newer (Local Fox is developed with 3.14). [Installation instructions.](https://wiki.python.org/python/getting-started/BeginnersGuide/Download.html)
+- **Ollama** run locally or hosted on a remote machine. Default model `qwen3.6:35b` recommended as a starting point. Other models, such as `flint:40b` or `gemma4:26b`, can be chosen later in the model menu. [Installation instructions.](https://ollama.com/download) The model (about 22 GB) can be downloaded with:
 
-2.  **Install Python** 3.11 or newer (Local Fox is developed with 3.14) from [python.org](https://www.python.org/downloads/).
-    On Windows, tick "Add python.exe to PATH" in the installer. Check it in a new terminal with `python --version`.
+  ```powershell
+  ollama pull qwen3.6:35b
+  ```
 
-3.  **Get Local Fox and ollmcp-generic-tools** into the same folder, side by side, as the build looks for the tools
-    there by default:
-    ```text
-    <any folder>\
-        local-fox\
-        ollmcp-generic-tools\
-    ```
-    - **With git**: in that folder, run
-      ```powershell
-      git clone https://github.com/JoelSaarimaki/local-fox.git
-      git clone https://github.com/JoelSaarimaki/ollmcp-generic-tools.git
-      ```
-      To update later, run `git pull` in both folders and build again.
-    - **Without git**: on the GitHub page of each,
-      [local-fox](https://github.com/JoelSaarimaki/local-fox) and
-      [ollmcp-generic-tools](https://github.com/JoelSaarimaki/ollmcp-generic-tools), choose "Code" → "Download ZIP",
-      and extract both ZIP files into the same folder. The extracted folders are named after the branch,
-      `local-fox-main` and `ollmcp-generic-tools-main`: rename the tools' folder to `ollmcp-generic-tools`
-      (or give its path to the build, below). To update later, download and extract both again and build again.
+## Local development
 
-4.  **Build the executable.** In a terminal in the `local-fox` folder, run
-    ```powershell
-    powershell -ExecutionPolicy Bypass -File .\build.ps1
-    ```
-    (Windows does not run PowerShell scripts by default, nor downloaded ones; `-ExecutionPolicy Bypass` allows
-    this one run.) With the tools in another folder, add `-ToolsRepo <path to ollmcp-generic-tools>`.
-    The first build creates a virtual environment, `.venv`, and downloads the dependencies into it, which takes a
-    few minutes; every build installs the tools again from their folder, so the executable has their current
-    version. The result is `dist\LocalFox\LocalFox.exe`. Copy the `dist\LocalFox` folder anywhere you like: it
-    is the whole application.
+### ollmcp-generic-tools submodule
 
-5.  **Start `LocalFox.exe`**, optionally with a project folder as its argument. Choose your project's folder and
+Local Fox has the [ollmcp-generic-tools](https://github.com/JoelSaarimaki/ollmcp-generic-tools)
+repository as a dependency. It is included as a [Git submodule](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
+
+Clone the repository with its submodule in one step:
+
+```bash
+git clone --recurse-submodules https://github.com/JoelSaarimaki/local-fox.git
+```
+
+If you already cloned it without the submodule, fetch it with:
+
+```bash
+git submodule update --init --recursive
+```
+
+To move the submodule to the latest commit of its default branch,
+run `git submodule update --remote` and commit the change as usual.
+For more, see the official [Git submodules guide](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
+
+### Installing dependencies
+
+On Windows:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pip install .\ollmcp-generic-tools
+```
+
+On MacOS and Linux:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install ./ollmcp-generic-tools
+```
+
+### Launching the app
+
+On Windows:
+
+```powershell
+.venv\Scripts\python -m local_fox <path\to\project\folder>
+```
+
+On MacOS and Linux:
+
+```sh
+.venv/bin/python -m local_fox <path/to/project/folder>
+```
+
+## Building the executable
+
+When building the app for a particular OS, the build must happen on that OS.
+
+### On Windows
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+Windows does not run PowerShell scripts by default, nor downloaded ones; `-ExecutionPolicy Bypass` allows
+this one run. The first build creates a virtual environment, `.venv`, and downloads the dependencies
+into it, which takes a few minutes; every build installs the tools again from their folder,
+so the executable has their current version. The result is `dist\LocalFox\LocalFox.exe`.
+The folder `dist\LocalFox` is a portable application and can be moved anywhere.
+
+**Start `LocalFox.exe`**, optionally with a project folder as its argument. Choose your project's folder and
     "Set up the project" (see [Choosing the project](#choosing-the-project) below), then add the commands the AI
     may run, such as your tests, to `.local-fox/commands.json` (see [The bundled tools](#the-bundled-tools)).
     The context size needs no setting: Local Fox sends one with every request (`num_ctx`, 65 536 tokens by
     default, see [Settings](#settings)).
 
-**From the source**, without building: after steps 1 to 3, in the `local-fox` folder run
-```powershell
-python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python -m pip install ..\ollmcp-generic-tools
-.venv\Scripts\python -m local_fox [project folder]
+### On MacOS and Linux
+
+```sh
+sh build.sh
 ```
-After updating the tools, install them again with the third command, or the old copy keeps running.
 
-### On macOS and Linux
+It builds into `dist/`. On macOS it creates `dist/LocalFox.app`, which you start from the Finder or the Dock,
+and also `dist/LocalFox/LocalFox`, the same application unpacked, to run from a terminal. On Linux only
+`dist/LocalFox/LocalFox` is created.
 
-Local Fox is developed and tested on Windows; macOS has basic support, untested on a Mac so far. The steps are
-the same, with these differences:
+### Additional notes for macOS and Linux
 
-- **Python** is `python3`, and the virtual environment's Python is `.venv/bin/python` in place of `.venv\Scripts\python`.
-- **The build** is `sh build.sh [path to ollmcp-generic-tools]`, in the `local-fox` folder. It builds
-  `dist/LocalFox.app` on macOS and `dist/LocalFox/LocalFox` on Linux, and must run on the system it builds for.
-  From the source, Local Fox starts with `.venv/bin/python -m local_fox [project folder]`.
-- **The PATH of your shell**: started from the Finder or the Dock, an application gets only the system's PATH, so
-  Local Fox asks your login shell for its PATH at the start. Programs installed with e.g. Homebrew are then found by
-  the tools' commands and by the MCP servers of `.mcp.json`.
-- **The settings** are in `~/Library/Application Support/LocalFox` on macOS and in `~/.config/LocalFox` on Linux.
-- **The look**: macOS uses Qt's Fusion style, which follows Local Fox's colors as the Windows style does, and the
-  SF Mono or Menlo font. Copy and paste are ⌘C and ⌘V.
-- **An unsigned application**: macOS blocks a built `LocalFox.app` at its first start, as it is not signed by an
-  identified developer. Open it once with right-click → "Open", or run it from the source.
+Local Fox is developed and tested on Windows; macOS has basic support.
+
+Started from the Finder or the Dock, an application gets only the system's PATH, so
+Local Fox asks your login shell for its PATH at the start. Programs installed with e.g.
+Homebrew are then found by the tools' commands and by the MCP servers of `.mcp.json`.
+
+The settings are in `~/Library/Application Support/LocalFox` on macOS and in `~/.config/LocalFox` on Linux.
+
+MacOS uses Qt's Fusion style, which follows Local Fox's colors as the Windows style does, and the
+SF Mono or Menlo font. Copy and paste are ⌘C and ⌘V.
+
+MacOS builds are unsigned, so MacOS blocks a built `LocalFox.app` at its first start.
+Open it once with right-click → "Open", or run it from the source.
 
 ### Ollama on another computer
 
@@ -466,12 +499,13 @@ The core (`local_fox` without `local_fox.ui`) needs only `ollama` and `mcp`. A s
 ## Comparing models through Local Fox
 
 `tools/compare.py` runs the scenarios of ollmcp-generic-tools' `local_ai_tests/compare_scenarios.py` through the
-core, with the checks and summary of its `compare_models.py`. Run it with the Python that has ollmcp-generic-tools
-and ollmcp installed:
+core, with the checks and summary of its `compare_models.py`. Run it with the Python that has ollmcp installed (the
+`.venv` does not). The `local_ai_tests` folder is gitignored in the tools repository, so a fresh submodule clone does
+not have it: point `--tools-repo` at a full clone of ollmcp-generic-tools that does (the submodule is the default):
 
 ```bash
 python tools/compare.py --models flint:40b,gemma4:26b --seeds 1,2,3
-python tools/compare.py --models flint:40b --scenarios plan_new,implement_fix --tools-repo ../ollmcp-generic-tools
+python tools/compare.py --models flint:40b --scenarios plan_new,implement_fix --tools-repo <full clone of ollmcp-generic-tools>
 ```
 
 The results go to `runs/compare/<time>/`. The differences from `compare_models.py` are those of Local Fox: the

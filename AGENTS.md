@@ -7,12 +7,12 @@ git-ignored for such notes); read it before changing behaviour if it is there.
 ## What the project is
 
 Local Fox is a desktop harness for local models run with Ollama and the MCP tools of
-[ollmcp-generic-tools](../ollmcp-generic-tools) (a sibling repository, `C:\Users\JoelSaarimäki\Documents\GIT\ollmcp-generic-tools`).
+[ollmcp-generic-tools](ollmcp-generic-tools) (a submodule of this repository).
 It replaces ollmcp. It has a core without UI dependencies (`local_fox/`) and a PySide6 window (`local_fox/ui/`),
 packaged as a Windows executable with PyInstaller (and, untested, a macOS application bundle).
 
-The tools are **bundled, not copied**: the `ollmcp_tools` package is installed into `.venv` from the sibling
-repository and packed into the executable. The tools stay developed in their own repository, which other MCP
+The tools are **bundled, not copied**: the `ollmcp_tools` package is installed into `.venv` from the
+`ollmcp-generic-tools` submodule and packed into the executable. The tools stay developed in their own repository, which other MCP
 clients and its `local_ai_tests` use too; don't copy their code into this one. Changes to the tools belong there.
 
 ## The default model: qwen3.6:35b
@@ -195,16 +195,18 @@ has been reported to loop there.
   `BUNDLE` with an `.icns` from the logo (`logo.write_icns`). Keep new code portable: no Windows-only calls without a
   `sys.platform` check, paths through `pathlib`; `tests/test_macos.py` simulates macOS where it can.
 - Windows 11, Python 3.14. The project's own virtual environment is `.venv` (PySide6, ollama, mcp, markdown, pytest,
-  pyinstaller, and ollmcp-tools with tree-sitter, installed non-editable from `..\ollmcp-generic-tools`). After
+  pyinstaller, and ollmcp-tools with tree-sitter, installed non-editable from `.\ollmcp-generic-tools`). After
   changing the tools, reinstall them into `.venv` (the build scripts do it on every build) or the old copy runs.
 - Tests: `.venv\Scripts\python -m pytest`. Set `LOCAL_FOX_CONFIG` to a scratch file when running anything, so the
   user's `%APPDATA%\LocalFox\config.json` is not created or changed. Don't build while the user has Local Fox open
   (check for the `LocalFox` process): the build replaces the running executable's files.
 - Command line: `.venv\Scripts\python -m local_fox.cli --project <folder> --yes "message"`.
 - Window: `.venv\Scripts\python -m local_fox [project]`. Build: `.\build.ps1` → `dist\LocalFox\LocalFox.exe`.
-- `tools/compare.py` runs with the **system** Python (`python`), which has ollmcp-generic-tools (editable, with its
-  `local_ai_tests`) and ollmcp installed; the `.venv` does not have ollmcp. The core imports nothing from PySide6,
-  so this works, and the bundled-tools rule then runs the system Python's (editable) tools.
+- `tools/compare.py` runs with the **system** Python (`python`), which has ollmcp installed; the `.venv` does not
+  have ollmcp. The core imports nothing from PySide6, so this works. The `local_ai_tests` harness comes from the
+  `ollmcp-generic-tools` submodule (`--tools-repo` defaults to it), and each session runs with that path on its
+  `PYTHONPATH`, so the bundled-tools rule runs the submodule's tools. `local_ai_tests` is gitignored in the tools
+  repository, so a fresh submodule clone does not have it: point `--tools-repo` at a full clone that does.
 - The tools' server of `.mcp.json` (`... -m ollmcp_tools`) runs with the bundled tools (`tools_setup.server_command`):
   `sys.executable -m ollmcp_tools` from the source, `LocalFox.exe --tools-server` from the executable. Other
   servers, and all servers with `bundled_tools: false`, run with the command of `.mcp.json`.
