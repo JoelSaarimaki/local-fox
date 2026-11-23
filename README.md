@@ -536,7 +536,3 @@ stall (it is counted instead).
 
 Set `LOCAL_FOX_CONFIG` to a scratch file when running the tests, or Local Fox for testing, so that your own
 `config.json` is not created or changed.
-
-## Not built yet
-
-- **Auto** context size.

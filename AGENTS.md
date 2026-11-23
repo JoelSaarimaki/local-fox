@@ -339,4 +339,6 @@ it left the file hash out of edits before the tools stopped needing one (1.1.0).
 
 ## Not built yet
 
-An automatic context size.
+An automatic context size: Local Fox sends the fixed `num_ctx` of the settings (65 536 by default), and the
+user raises it with "Larger context" when the context fills. It was part of the design plan and is missing on
+purpose so far, not by mistake. It is not listed in the README, which describes only what Local Fox does.
