@@ -326,7 +326,9 @@ it left the file hash out of edits before the tools stopped needing one (1.1.0).
   2. Choose the number from the `Unreleased` entries: a **patch** for fixes and small features, a **minor** or
      **major** one only when the user says so (see above). Propose it, with the reason, if it is not obvious.
   3. One release commit on `dev`: `__version__` raised, `## Unreleased` renamed `## x.y.z (date)` (a test checks
-     the current version has such a heading), message `Version x.y.z: <what changed>`. Tag it `vx.y.z`.
+     the current version has such a heading), message `Version x.y.z: <what changed>`. Tag it with an annotated tag,
+     `git tag -a vx.y.z -m "Version x.y.z"`: `--follow-tags` pushes only annotated tags (the tags from v1.0.1 to
+     v1.2.0 are lightweight, and reached GitHub only through a push of all tags).
   4. Build, unless the user has Local Fox open.
   5. The user pushes: `git push origin dev dev:main --follow-tags`. Git refuses `dev:main` unless it is a
      fast-forward, so nothing on `main` is overwritten; never suggest `--force` for it.
