@@ -3,10 +3,12 @@ Runs the comparison scenarios of ollmcp-generic-tools (local_ai_tests/compare_sc
 Local Fox, so that the measurements show how a model behaves in Local Fox, with the same checks and summary as
 compare_models.py.
 
-    python tools/compare.py [--tools-repo ../ollmcp-generic-tools] [--models qwen3.6:35b,flint:40b]
+    python tools/compare.py [--tools-repo ollmcp-generic-tools] [--models qwen3.6:35b,gemma4:26b]
                             [--scenarios plan_new,implement_fix] [--seeds 1,2,3] [--context 32000] [--no-think]
 
-Run it with the Python that has ollmcp-generic-tools and ollmcp installed, as the scenarios' harness needs both.
+Run it with the Python that has ollmcp installed, as the scenarios' harness needs it; the harness itself comes
+from --tools-repo (the ollmcp-generic-tools submodule by default, which needs local_ai_tests copied into it, as
+that folder is gitignored in the tools repository).
 Differences from compare_models.py, as they are differences of Local Fox from ollmcp:
 - The session starts as Local Fox starts it: the instructions and the filemap in the system message, not a
   "Read the project instructions." exchange. The instructions are Local Fox's template, as its setup writes
@@ -103,7 +105,7 @@ async def run(model: str, scenario: dict, seed: int, args, out: Path, cm, harnes
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--tools-repo", default=str(ROOT.parent / "ollmcp-generic-tools"))
+    parser.add_argument("--tools-repo", default=str(ROOT / "ollmcp-generic-tools"))
     parser.add_argument("--models", default="qwen3.6:35b")
     parser.add_argument("--scenarios", default=None)
     parser.add_argument("--seeds", default="1,2,3")
@@ -118,6 +120,9 @@ async def main() -> None:
     args = parser.parse_args()
 
     tests = Path(args.tools_repo).resolve() / "local_ai_tests"
+    if not (tests / "compare_models.py").is_file():
+        # local_ai_tests is gitignored in the tools repository, so the submodule (the default) has it only if copied in
+        parser.error(f"{tests} has no compare_models.py: give --tools-repo a clone of ollmcp-generic-tools that has local_ai_tests")
     sys.path.insert(0, str(tests))
     import compare_models as cm  # noqa: E402  From the tools repository
     import harness  # noqa: E402

@@ -7,13 +7,17 @@ git-ignored for such notes); read it before changing behaviour if it is there.
 ## What the project is
 
 Local Fox is a desktop harness for local models run with Ollama and the MCP tools of
-[ollmcp-generic-tools](../ollmcp-generic-tools) (a sibling repository, `C:\Users\JoelSaarimäki\Documents\GIT\ollmcp-generic-tools`).
+[ollmcp-generic-tools](ollmcp-generic-tools) (a submodule of this repository).
 It replaces ollmcp. It has a core without UI dependencies (`local_fox/`) and a PySide6 window (`local_fox/ui/`),
-packaged as a Windows executable with PyInstaller (and, untested, a macOS application bundle).
+packaged as a Windows executable with PyInstaller (and a macOS application bundle).
 
-The tools are **bundled, not copied**: the `ollmcp_tools` package is installed into `.venv` from the sibling
-repository and packed into the executable. The tools stay developed in their own repository, which other MCP
-clients and its `local_ai_tests` use too; don't copy their code into this one. Changes to the tools belong there.
+The tools are **bundled, not copied**: the `ollmcp_tools` package is installed into `.venv` from the
+`ollmcp-generic-tools` submodule and packed into the executable. The tools stay developed in their own repository, which other MCP
+clients and its `local_ai_tests` use too; don't copy their code into this one. Changes to the tools belong there:
+they are made and committed in a clone of the tools' repository, not in the submodule, and reach Local Fox when the
+submodule is moved to a pushed commit (`git submodule update --remote`, then commit the new pointer on `dev`).
+The submodule's checked-out commit is what `.venv` and the executable get; after a pull that moves the pointer,
+run `git submodule update --init` (`git submodule status` marks a checkout that differs with `+`, a missing one with `-`).
 
 ## The default model: qwen3.6:35b
 
@@ -23,8 +27,7 @@ the right mode in 14 of 14 runs, read the needed files first in 14 of 14, passed
 against flint's 25, and took 44 seconds a run against flint's 103 (results in ollmcp-generic-tools'
 local_ai_test_results.md). It is a mixture-of-experts model with about 3B of its 35B parameters active per token,
 so it is fast even mostly on the CPU. It checks the existing plans and reviews its diff less often than flint, and
-it left the file hash out of edits before the tools stopped needing one (1.1.0). Avoid temperature 0 with it: Qwen3.6
-has been reported to loop there.
+it left the file hash out of edits before the tools stopped needing one (1.1.0).
 
 `flint:40b` was the default before it; what follows is why Local Fox tolerates its calls by bare tool names.
 
@@ -189,22 +192,24 @@ has been reported to loop there.
 
 ## Environment and commands
 
-- **macOS has basic support, never run on a Mac**: `shell_path.py` (the login shell's PATH, as an application
+- **macOS has basic support**, tested on a Mac: `shell_path.py` (the login shell's PATH, as an application
   started from the Finder gets only the system's), the config in `~/Library/Application Support`, Fusion style and
   Mac fonts (`ui/app.py`, `theme.FONT_FAMILIES`), `/Volumes/<disk>` and `~/Library` refused, `build.sh` and the spec's
   `BUNDLE` with an `.icns` from the logo (`logo.write_icns`). Keep new code portable: no Windows-only calls without a
   `sys.platform` check, paths through `pathlib`; `tests/test_macos.py` simulates macOS where it can.
 - Windows 11, Python 3.14. The project's own virtual environment is `.venv` (PySide6, ollama, mcp, markdown, pytest,
-  pyinstaller, and ollmcp-tools with tree-sitter, installed non-editable from `..\ollmcp-generic-tools`). After
+  pyinstaller, and ollmcp-tools with tree-sitter, installed non-editable from `.\ollmcp-generic-tools`). After
   changing the tools, reinstall them into `.venv` (the build scripts do it on every build) or the old copy runs.
 - Tests: `.venv\Scripts\python -m pytest`. Set `LOCAL_FOX_CONFIG` to a scratch file when running anything, so the
   user's `%APPDATA%\LocalFox\config.json` is not created or changed. Don't build while the user has Local Fox open
   (check for the `LocalFox` process): the build replaces the running executable's files.
 - Command line: `.venv\Scripts\python -m local_fox.cli --project <folder> --yes "message"`.
 - Window: `.venv\Scripts\python -m local_fox [project]`. Build: `.\build.ps1` → `dist\LocalFox\LocalFox.exe`.
-- `tools/compare.py` runs with the **system** Python (`python`), which has ollmcp-generic-tools (editable, with its
-  `local_ai_tests`) and ollmcp installed; the `.venv` does not have ollmcp. The core imports nothing from PySide6,
-  so this works, and the bundled-tools rule then runs the system Python's (editable) tools.
+- `tools/compare.py` runs with the **system** Python (`python`), which has ollmcp installed; the `.venv` does not
+  have ollmcp. The core imports nothing from PySide6, so this works. The `local_ai_tests` harness comes from the
+  `ollmcp-generic-tools` submodule (`--tools-repo` defaults to it), and each session runs with that path on its
+  `PYTHONPATH`, so the bundled-tools rule runs the submodule's tools. `local_ai_tests` is gitignored in the tools
+  repository, so a fresh submodule clone does not have it: point `--tools-repo` at a full clone that does.
 - The tools' server of `.mcp.json` (`... -m ollmcp_tools`) runs with the bundled tools (`tools_setup.server_command`):
   `sys.executable -m ollmcp_tools` from the source, `LocalFox.exe --tools-server` from the executable. Other
   servers, and all servers with `bundled_tools: false`, run with the command of `.mcp.json`.
@@ -228,7 +233,7 @@ has been reported to loop there.
   the `ollama serve` of "Start Ollama server", which the user should see and be able to stop: a console window of
   its own on Windows (`CREATE_NEW_CONSOLE`), Terminal on macOS and a terminal on Linux (`ollama_server.terminal_command`,
   followed by its port as `TerminalServer`, as the terminal runs it, not Local Fox); hidden with a log only without a terminal.
-  The macOS and Linux paths are tested only by simulation (`tests/test_macos.py`).
+  The unit tests simulate the macOS and Linux paths (`tests/test_macos.py`), so they run on any system.
 - **PyInstaller**: `collect_submodules("mcp")` must leave out `mcp.cli` (it calls `sys.exit` on import); `mcp.server`
   is needed by the bundled tools. The tools import their toolsets by name, so the spec collects `ollmcp_tools`'
   submodules, its data files (the setup templates), its metadata (the version in the feed) and the tree-sitter
@@ -325,8 +330,10 @@ has been reported to loop there.
   changes the application (only these rules, other documents for contributors, tests): `CHANGELOG.md` has no
   `## Unreleased` and `git diff vx.y.z dev -- local_fox packaging pyproject.toml` (the last release's tag) is empty.
   The commit gets no tag, and `__version__` still describes the application.
-- Don't release with changes of ollmcp-generic-tools that the user has not committed there yet: the executable
-  bundles the tools from that working tree.
+- Before a release, check the tools: `git submodule status` without `+` or `-` (the build bundles the submodule's
+  working tree), and the pointer at the tools' commit the release should have. A tools change the user wants in it
+  must be committed and pushed in the tools' repository first, and the pointer moved to it on `dev` (see above).
+  Note a moved pointer in the changelog when the tools' change is visible to users.
 - There is no roadmap: development is not planned in versions, so don't add one (or planned versions to the
   changelog). The version only records what has been done.
 

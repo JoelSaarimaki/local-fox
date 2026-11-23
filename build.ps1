@@ -1,7 +1,7 @@
 # Builds the Local Fox executable into dist\LocalFox\LocalFox.exe, with the tools of ollmcp-generic-tools bundled.
 # Creates the virtual environment .venv with the dependencies first if it does not exist, and installs the tools
-# from -ToolsRepo (the sibling repository by default) into it on every build, so the executable has their current version.
-param([string]$ToolsRepo = "..\ollmcp-generic-tools")
+# from -ToolsRepo (the ollmcp-generic-tools submodule by default) into it on every build, so the executable has their current version.
+param([string]$ToolsRepo = ".\ollmcp-generic-tools")
 Set-Location $PSScriptRoot
 if (-not (Test-Path ".venv\Scripts\python.exe")) {
     python -m venv .venv
