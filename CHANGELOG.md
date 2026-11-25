@@ -7,7 +7,7 @@ projects rely on (settings, saved conversations, set-up projects).
 Changes on the `dev` branch are listed under "Unreleased" at the top; a release (`dev` merged into `main`) gives
 them their version.
 
-## Unreleased
+## 1.2.1 (2026-11-25)
 
 - **ollmcp-generic-tools is a submodule** of this repository (`git clone --recurse-submodules`), and the build
   scripts and the install steps take the tools from it by default, instead of a folder beside `local-fox`.
