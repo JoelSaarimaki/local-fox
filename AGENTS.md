@@ -325,15 +325,24 @@ it left the file hash out of edits before the tools stopped needing one (1.1.0).
   1. On `dev`, `git pull` first, so the release includes the others' merged work, and check that `main` can
      fast-forward: `git fetch` and `git merge-base --is-ancestor origin/main dev`. If it fails, `main` has a commit
      that `dev` lacks: stop and tell the user, don't merge or rebase around it.
-  2. Choose the number from the `Unreleased` entries: a **patch** for fixes and small features, a **minor** or
+  2. Check that `Unreleased` covers the changes since the last release (`git log vx.y.z..dev`): merged pull
+     requests may lack their lines. Add the missing ones.
+  3. The tests pass on the clean `dev`: `.venv\Scripts\python -m pytest`. Neither the build nor any CI runs them
+     (there is no CI). If they fail, stop and tell the user.
+  4. Choose the number from the `Unreleased` entries: a **patch** for fixes and small features, a **minor** or
      **major** one only when the user says so (see above). Propose it, with the reason, if it is not obvious.
-  3. One release commit on `dev`: `__version__` raised, `## Unreleased` renamed `## x.y.z (date)` (a test checks
+  5. One release commit on `dev`: `__version__` raised, `## Unreleased` renamed `## x.y.z (date)` (a test checks
      the current version has such a heading), message `Version x.y.z: <what changed>`. Tag it with an annotated tag,
      `git tag -a vx.y.z -m "Version x.y.z"`: `--follow-tags` pushes only annotated tags (the tags from v1.0.2 to
      v1.2.0 are lightweight, and reached GitHub only through a push of all tags).
-  4. Build, unless the user has Local Fox open.
-  5. The user pushes: `git push origin dev dev:main --follow-tags`. Git refuses `dev:main` unless it is a
+  6. Build, unless the user has Local Fox open, and smoke-test the executable: start `dist\LocalFox\LocalFox.exe`
+     with `LOCAL_FOX_CONFIG` at a scratch file and a throwaway set-up project, and check that it keeps running and
+     that the tools' server started (`logs\server-*.log` beside the scratch config has no traceback). Some failures
+     appear only in the executable (PyInstaller's missing modules, console windows).
+  7. The user pushes: `git push origin dev dev:main --follow-tags`. Git refuses `dev:main` unless it is a
      fast-forward, so nothing on `main` is overwritten; never suggest `--force` for it.
+- **Until it is pushed**, a release can still be changed (another number, a fix): `git tag -d vx.y.z`,
+  `git reset --soft HEAD~1`, and make the release commit and tag again.
 - **Without a release**, `main` may move to `dev` the same way (untagged) when the user asks, if nothing since the
   last release changes the application (only these rules, other documents for contributors, tests): `CHANGELOG.md`
   has no `## Unreleased` and `git diff vx.y.z dev -- local_fox packaging pyproject.toml` (the last release's tag)

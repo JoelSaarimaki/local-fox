@@ -18,6 +18,8 @@ them their version.
   field: the form is now a grid layout, which gives a wrapped help text the height it needs (a form layout did
   not, cutting the first and last lines of a description of three lines or more), and the text is top-aligned
   instead of centered.
+- The monospace font is chosen from a list of each system's own fonts (Cascadia Mono or Consolas on Windows,
+  SF Mono or Menlo on macOS, DejaVu Sans Mono or Liberation Mono on Linux).
 
 ## 1.2.0 (2026-11-20)
 
