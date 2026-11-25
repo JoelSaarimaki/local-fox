@@ -20,7 +20,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
                                QScrollArea, QSizePolicy, QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
 from .. import config as config_module
@@ -83,15 +83,14 @@ class AppSettingsForm(QWidget):
         self.max_context = (max_contexts or {}).get(values.get("model"))
         self.models_note = QLabel("", objectName="dim")
         self.models_note.setWordWrap(True)
+        self.models_note.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.models_note.hide()
         self._models: list[str] | None = list(models) if models else None
         self._models_host = ""  # The address whose models were last asked for
         # The models are listed after a pause in typing the address, not at every key
         self._host_timer = QTimer(self, singleShot=True, interval=HOST_PAUSE_MS)
         self._host_timer.timeout.connect(self.want_models)
-        form = QFormLayout(self)
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
-        form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        form = _Form(self)
         form.setVerticalSpacing(4)
         for key in config_module.DEFAULTS:
             field = self._field(key, values.get(key, config_module.DEFAULTS[key]), models, tools)
@@ -352,14 +351,37 @@ def _parse(kind: str, text: str):
             raise ValueError(f"not valid JSON: {error}") from None
     return text
 
-def _row(form: QFormLayout, key: str, field: QWidget, help_text: str, button: QWidget | None = None,
+class _Form(QGridLayout):
+    """
+    The form of the settings views: a column of setting names and a column of their boxes (field, button, help
+    text under them). A QGridLayout, not a QFormLayout: the form sits in a scroll area, and QFormLayout does not
+    follow a wrapped label's heightForWidth when it sizes its rows, which on macOS clipped the first and last
+    lines of a help text of three lines or more; QGridLayout follows it.
+    """
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setColumnStretch(1, 1)  # The boxes take the width the names leave
+        self._rows = 0
+
+    def add_setting(self, key: str, box: QWidget) -> None:
+        """
+        Adds one setting to the next row: its name at the top left, its box beside it.
+        """
+        self.addWidget(QLabel(key), self._rows, 0, Qt.AlignTop | Qt.AlignLeft)
+        self.addWidget(box, self._rows, 1)
+        self._rows += 1
+
+def _row(form: _Form, key: str, field: QWidget, help_text: str, button: QWidget | None = None,
          status: QLabel | None = None) -> None:
     """
-    Adds a setting to a form: its name, its field with the button beside it, if any, and under them the status,
-    if any, and the help text, which spans the row.
+    Adds a setting to the form: its name, its field with the button beside it, if any, and under them the status,
+    if any, and the help text, which spans the row. The help text is top-aligned, so its distance from the field
+    above it stays the same whatever height the row gives it.
     """
     note = QLabel(help_text, objectName="dim")
     note.setWordWrap(True)
+    note.setAlignment(Qt.AlignTop | Qt.AlignLeft)
     box = QWidget()
     # Expanding, so that the help text spans the row also under a narrow field
     box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -380,7 +402,7 @@ def _row(form: QFormLayout, key: str, field: QWidget, help_text: str, button: QW
     if status:
         column.addWidget(status)
     column.addWidget(note)
-    form.addRow(QLabel(key), box)
+    form.add_setting(key, box)
 
 class ToolsConfigForm(QWidget):
     """
@@ -404,9 +426,7 @@ class ToolsConfigForm(QWidget):
             note = QLabel(f"Also in the file, kept as they are: {', '.join(unknown)}", objectName="dim")
             note.setWordWrap(True)
             layout.addWidget(note)
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignTop)
-        form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        form = _Form()
         form.setVerticalSpacing(4)
         layout.addLayout(form)
         for key, (kind, help_text) in tools_config.SETTINGS.items():

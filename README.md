@@ -88,6 +88,22 @@ On MacOS and Linux:
 .venv/bin/python -m local_fox <path/to/project/folder>
 ```
 
+## Tests
+
+On Windows:
+
+```bash
+.venv\Scripts\python -m pytest
+```
+
+On MacOS and Linux:
+
+```sh
+.venv/bin/python -m pytest
+```
+
+The tests point `LOCAL_FOX_CONFIG` at a scratch file themselves (in `tests/conftest.py`), so your own `config.json` is not created or changed. When running Local Fox itself for testing (the window or the command line), set `LOCAL_FOX_CONFIG` to a scratch file for the same reason.
+
 ## Building the executable
 
 When building the app for a particular OS, the build must happen on that OS.
@@ -527,12 +543,3 @@ python tools/compare.py --models qwen3.6:35b --scenarios plan_new,implement_fix 
 The results go to `runs/compare/<time>/`. The differences from `compare_models.py` are those of Local Fox: the
 instructions and filemap are given at the start, faulty calls get a response, and no "Continue." is sent after a
 stall (it is counted instead).
-
-## Tests
-
-```bash
-.venv\Scripts\python -m pytest      # .venv/bin/python on macOS and Linux
-```
-
-Set `LOCAL_FOX_CONFIG` to a scratch file when running the tests, or Local Fox for testing, so that your own
-`config.json` is not created or changed.
