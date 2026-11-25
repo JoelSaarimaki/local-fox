@@ -339,8 +339,10 @@ it left the file hash out of edits before the tools stopped needing one (1.1.0).
      with `LOCAL_FOX_CONFIG` at a scratch file and a throwaway set-up project, and check that it keeps running and
      that the tools' server started (`logs\server-*.log` beside the scratch config has no traceback). Some failures
      appear only in the executable (PyInstaller's missing modules, console windows).
-  7. The user pushes: `git push origin dev dev:main --follow-tags`. Git refuses `dev:main` unless it is a
-     fast-forward, so nothing on `main` is overwritten; never suggest `--force` for it.
+  7. The agent pushes: `git push origin dev dev:main --follow-tags`. Git refuses `dev:main` unless it is a
+     fast-forward, so nothing on `main` is overwritten; never use `--force` for it. If it is refused, stop and
+     tell the user. Then check that `origin/main` is the release commit and the tag is on GitHub
+     (`git ls-remote --tags origin vx.y.z`).
 - **Until it is pushed**, a release can still be changed (another number, a fix): `git tag -d vx.y.z`,
   `git reset --soft HEAD~1`, and make the release commit and tag again.
 - **Without a release**, `main` may move to `dev` the same way (untagged) when the user asks, if nothing since the
